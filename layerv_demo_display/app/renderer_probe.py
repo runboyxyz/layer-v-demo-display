@@ -10,7 +10,6 @@ import re
 from urllib.parse import urlsplit
 
 
-HA_ORIGIN = os.getenv("HA_FRONTEND_ORIGIN", "http://homeassistant").rstrip("/")
 CHROMIUM = os.getenv("CHROMIUM_EXECUTABLE", "/usr/lib/chromium/chromium")
 LOGGER = logging.getLogger("demo_display.renderer_probe")
 NETWORK_ERROR = re.compile(r"net::(ERR_[A-Z0-9_]+)")
@@ -23,7 +22,7 @@ class ProbeResult:
     frame: bytes | None = None
 
 
-def allowed_request(url: str, origin: str = HA_ORIGIN) -> bool:
+def allowed_request(url: str, origin: str = "http://homeassistant:80") -> bool:
     """Allow HA-origin HTTP/WebSocket traffic and browser-local resources."""
     parsed = urlsplit(url)
     if parsed.scheme in {"data", "blob"}:
@@ -98,6 +97,7 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
     from playwright.async_api import async_playwright
 
     width, height = settings.viewport
+    ha_origin = settings.ha_origin
     browser = context = None
     stage = "playwright_driver"
     try:
@@ -124,13 +124,13 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
             await page.add_init_script(script=external_auth_script())
 
             async def route_request(route):
-                if allowed_request(route.request.url):
+                if allowed_request(route.request.url, ha_origin):
                     await route.continue_()
                 else:
                     await route.abort("blockedbyclient")
 
             await page.route("**/*", route_request)
-            target = f"{HA_ORIGIN}{settings.dashboard_path}?external_auth=1"
+            target = f"{ha_origin}{settings.dashboard_path}?external_auth=1"
             stage = "navigation"
             # HA dashboards can keep DOMContentLoaded pending while cards and
             # integrations initialize. A committed same-origin response is the
@@ -141,7 +141,7 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
             await page.wait_for_selector("home-assistant", state="attached", timeout=timeout_ms)
             await page.wait_for_selector("hui-root", state="visible", timeout=timeout_ms)
             await page.wait_for_timeout(2_000)
-            if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
+            if not page.url.startswith(f"{ha_origin}{settings.dashboard_path}"):
                 return ProbeResult("failed", "Home Assistant did not accept the App identity")
             stage = "capture"
             frame = await page.screenshot(type="jpeg", quality=75, full_page=False)

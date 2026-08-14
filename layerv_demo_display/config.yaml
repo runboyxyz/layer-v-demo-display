@@ -1,5 +1,5 @@
 name: LayerV Demo Display
-version: "0.8.6"
+version: "0.8.7"
 slug: layerv_demo_display
 description: DEVELOPMENT TOOL - remotely show rendered dashboard pixels during LayerV demonstrations
 url: https://github.com/runboyxyz/layer-v-demo-display
@@ -26,6 +26,7 @@ hassio_role: default
 tmpfs: true
 options:
   dashboard_path: /demo-home/home
+  ha_frontend_port: 80
   resolution: 1920x1080
   renderer_mode: jpeg
   video_resolution: 960x540
@@ -36,6 +37,7 @@ options:
   hide_ha_header: true
 schema:
   dashboard_path: str
+  ha_frontend_port: list(80|8123)
   resolution: list(1280x720|1920x1080)
   renderer_mode: list(jpeg|video)
   video_resolution: list(960x540|1280x720)

@@ -21,6 +21,7 @@ class ConfigurationError(ValueError):
 @dataclass(frozen=True)
 class Settings:
     dashboard_path: str = "/demo-home/home"
+    ha_frontend_port: int = 80
     resolution: str = "1920x1080"
     renderer_mode: str = "jpeg"
     video_resolution: str = "960x540"
@@ -37,6 +38,10 @@ class Settings:
     @property
     def video_viewport(self) -> tuple[int, int]:
         return VIDEO_RESOLUTIONS[self.video_resolution]
+
+    @property
+    def ha_origin(self) -> str:
+        return f"http://homeassistant:{self.ha_frontend_port}"
 
 
 def validate_dashboard_path(value: object) -> str:
@@ -75,6 +80,11 @@ def parse_settings(value: object) -> Settings:
     resolution = value.get("resolution", "1920x1080")
     if resolution not in RESOLUTIONS:
         raise ConfigurationError("Resolution must be 1280x720 or 1920x1080")
+    ha_frontend_port = value.get("ha_frontend_port", 80)
+    if isinstance(ha_frontend_port, str) and ha_frontend_port.isdigit():
+        ha_frontend_port = int(ha_frontend_port)
+    if ha_frontend_port not in {80, 8123}:
+        raise ConfigurationError("Home Assistant frontend port must be 80 or 8123")
     renderer_mode = value.get("renderer_mode", "jpeg")
     if renderer_mode not in {"jpeg", "video"}:
         raise ConfigurationError("Renderer mode must be jpeg or video")
@@ -94,6 +104,7 @@ def parse_settings(value: object) -> Settings:
         raise ConfigurationError("Session duration must be 15, 30, 60, or 120 minutes")
     return Settings(
         dashboard_path=validate_dashboard_path(value.get("dashboard_path", "/demo-home/home")),
+        ha_frontend_port=ha_frontend_port,
         resolution=resolution,
         renderer_mode=renderer_mode,
         video_resolution=video_resolution,

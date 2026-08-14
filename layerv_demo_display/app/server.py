@@ -174,6 +174,7 @@ def status_payload(settings: Settings) -> dict:
         "renderer_mode": settings.renderer_mode,
         "chromium_running": current.active,
         "dashboard_path": settings.dashboard_path,
+        "ha_frontend_port": settings.ha_frontend_port,
         "viewport": {"width": width, "height": height},
         "video_output": {"width": video_width, "height": video_height},
         "fallback_refresh_interval_seconds": settings.capture_interval,
@@ -258,7 +259,7 @@ button,a{{padding:.8rem 1rem;margin-top:14px;border:0;border-radius:8px;font-wei
 {f'<div class="notice">{escape(message)}</div>' if message else ''}<div class="state"><span class="dot"></span><strong>Demo Session: {'Active' if active else 'Not running'}</strong></div><dl>
 <dt>Renderer</dt><dd>{escape(current.state)}</dd><dt>Chromium</dt><dd>{'Running' if active else 'Not running'}</dd>
 <dt>LayerV</dt><dd>{publication}</dd><dt>Invitations</dt><dd>{len(invitations)}</dd>
-<dt>Dashboard</dt><dd>{escape(settings.dashboard_path)}</dd><dt>Resolution</dt><dd>{width} × {height}</dd>
+<dt>Dashboard</dt><dd>{escape(settings.dashboard_path)}</dd><dt>HA frontend port</dt><dd>{settings.ha_frontend_port}</dd><dt>Resolution</dt><dd>{width} × {height}</dd>
 <dt>Renderer mode</dt><dd>{escape(settings.renderer_mode)}</dd><dt>Video output</dt><dd>{escape(settings.video_resolution) if settings.renderer_mode == 'video' else 'Not active'}</dd><dt>Target FPS</dt><dd>{settings.renderer_target_fps if settings.renderer_mode == 'video' else 'JPEG adaptive'}</dd>
 <dt>Current FPS</dt><dd>{performance['fps']:.1f}</dd><dt>Encoded bitrate</dt><dd>{performance['encoded_bitrate_bps'] / 1_000_000:.2f} Mbps</dd>
 <dt>Refresh</dt><dd>Live stream (1-second fallback)</dd><dt>Expires</dt><dd>{escape(expires)}</dd>

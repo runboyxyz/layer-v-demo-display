@@ -9,7 +9,7 @@ import logging
 import threading
 import time
 
-from .renderer_probe import CHROMIUM, HA_ORIGIN, allowed_request, external_auth_script
+from .renderer_probe import CHROMIUM, allowed_request, external_auth_script
 from .video import FragmentedMP4, ffmpeg_command
 
 
@@ -191,6 +191,7 @@ async def _capture_loop(session, settings, token: str, startup_complete=None) ->
     from playwright.async_api import async_playwright
 
     width, height = settings.viewport
+    ha_origin = settings.ha_origin
     manager = async_playwright()
     playwright = browser = context = stop_task = None
     deadline = time.monotonic() + 60
@@ -226,13 +227,13 @@ async def _capture_loop(session, settings, token: str, startup_complete=None) ->
         await _bounded(page.add_init_script(script=external_auth_script()), deadline)
 
         async def route_request(route):
-            if allowed_request(route.request.url):
+            if allowed_request(route.request.url, ha_origin):
                 await route.continue_()
             else:
                 await route.abort("blockedbyclient")
 
         await _bounded(page.route("**/*", route_request), deadline)
-        target = f"{HA_ORIGIN}{settings.dashboard_path}?external_auth=1"
+        target = f"{ha_origin}{settings.dashboard_path}?external_auth=1"
         LOGGER.info("Renderer startup: stage=navigation")
         await _bounded(page.goto(target, wait_until="commit", timeout=45_000), deadline)
         LOGGER.info("Renderer startup: stage=ha_shell")
@@ -243,7 +244,7 @@ async def _capture_loop(session, settings, token: str, startup_complete=None) ->
         await _bounded(page.wait_for_selector("hui-root", state="visible", timeout=45_000), deadline)
         await _bounded(page.wait_for_timeout(2_000), deadline)
         await _bounded(_apply_chrome_visibility(page, settings), deadline)
-        if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
+        if not page.url.startswith(f"{ha_origin}{settings.dashboard_path}"):
             raise RuntimeError("Home Assistant rejected the App identity")
         session.renderer_started()
         if startup_complete is not None:

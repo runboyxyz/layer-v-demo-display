@@ -14,6 +14,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(settings.renderer_mode, "jpeg")
         self.assertEqual(settings.renderer_target_fps, 5)
         self.assertEqual(settings.video_viewport, (960, 540))
+        self.assertEqual(settings.ha_origin, "http://homeassistant:80")
 
     @patch.dict("os.environ", {"APP_SETTINGS_JSON": json.dumps({"capture_interval": 4})})
     def test_validated_runtime_settings_avoid_supervisor_owned_file(self):
@@ -24,6 +25,9 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_accepts_home_assistant_list_value_for_target_fps(self):
         self.assertEqual(parse_settings({"renderer_target_fps": "5"}).renderer_target_fps, 5)
+
+    def test_accepts_bounded_home_assistant_frontend_ports(self):
+        self.assertEqual(parse_settings({"ha_frontend_port": "8123"}).ha_origin, "http://homeassistant:8123")
 
     def test_rejects_external_and_ambiguous_targets(self):
         invalid = (
@@ -41,6 +45,7 @@ class ConfigurationTests(unittest.TestCase):
             {"default_session_duration": 61}, {"hide_ha_header": "yes"},
             {"renderer_mode": "webrtc"}, {"renderer_target_fps": 30},
             {"video_resolution": "1920x1080"},
+            {"ha_frontend_port": 8080},
         ):
             with self.subTest(options=options), self.assertRaises(ConfigurationError):
                 parse_settings(options)

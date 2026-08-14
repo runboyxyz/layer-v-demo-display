@@ -88,6 +88,7 @@ configuration, routes, data, credentials, images, or containers.
 
 - `dashboard_path`: a relative local HA path such as `/demo-home/home`.
 - `resolution`: `1280x720` or `1920x1080`.
+- `ha_frontend_port`: `80` for the HA Green setup, or `8123` for a standard HA OS VM.
 - `video_resolution`: `960x540` (lower CPU, recommended) or `1280x720` (sharper).
 - `capture_interval`: JPEG polling fallback interval, 1–10 seconds; default 1. The normal live stream captures shared frames at roughly 2–3 FPS.
 

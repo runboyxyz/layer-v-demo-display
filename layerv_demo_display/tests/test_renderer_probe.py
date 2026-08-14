@@ -11,7 +11,7 @@ from app.configuration import Settings
 
 class RendererProbeTests(unittest.TestCase):
     def test_navigation_is_restricted_to_home_assistant_origin(self):
-        origin = "http://homeassistant"
+        origin = "http://homeassistant:80"
         self.assertTrue(allowed_request(origin + "/demo-home/home", origin))
         self.assertTrue(allowed_request("ws://homeassistant/api/websocket", origin))
         self.assertTrue(allowed_request("blob:http://homeassistant/id", origin))
