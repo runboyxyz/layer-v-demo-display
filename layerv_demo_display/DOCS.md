@@ -13,7 +13,7 @@ Version 0.2.0 adds Debian ARM64 Chromium and Python Playwright only to this
 standalone App. The Ingress administrator can run one bounded authentication
 probe. It creates a fresh browser context, supplies the App-scoped system token
 through Home Assistant's documented external-authentication bridge, restricts
-network requests to the fixed `homeassistant:8123` origin, captures at most one
+network requests to the fixed lab HA Green origin at `100.64.90.108:80`, captures at most one
 in-memory JPEG, and closes the context and browser in all result paths.
 
 This is an experiment, not a supported session renderer. It deliberately uses

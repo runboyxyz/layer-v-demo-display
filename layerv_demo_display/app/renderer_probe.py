@@ -10,7 +10,7 @@ import re
 from urllib.parse import urlsplit
 
 
-HA_ORIGIN = os.getenv("HA_FRONTEND_ORIGIN", "http://homeassistant:8123").rstrip("/")
+HA_ORIGIN = os.getenv("HA_FRONTEND_ORIGIN", "http://100.64.90.108").rstrip("/")
 CHROMIUM = os.getenv("CHROMIUM_EXECUTABLE", "/usr/lib/chromium/chromium")
 LOGGER = logging.getLogger("demo_display.renderer_probe")
 NETWORK_ERROR = re.compile(r"net::(ERR_[A-Z0-9_]+)")
