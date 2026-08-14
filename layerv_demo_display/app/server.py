@@ -176,8 +176,10 @@ def status_html(settings: Settings, version: str, message: str = "") -> bytes:
         activation
         + f"<p><label>{'2. Open Demo Display' if remote_url else 'Local display path'}</label>"
         f"<code id=\"display-path\">{escape(remote_url or display_path)}</code></p>"
-        '<p><button data-copy="display-path" type="button">Copy Display Link</button></p>'
-        '<form method="post" action="api/session/end"><button class="danger" type="submit">End Demo Session</button></form>'
+        + (f'<p><a href="{escape(remote_url)}" target="_blank" rel="noopener noreferrer">Open Demo Display</a> ' if remote_url else '<p>')
+        + '<button data-copy="display-path" type="button">Copy Display Link</button></p>'
+        + '<p>The activation qURL and display link are created by LayerV for this session. Copy either link above to resend it. Ending the session invalidates the display token and revokes its qURL; starting another session creates new links.</p>'
+        + '<form method="post" action="api/session/end"><button class="danger" type="submit">End Session &amp; Revoke qURL</button></form>'
         if active
         else '<form method="post" action="api/session/start">'
         '<label class="check"><input type="checkbox" name="email_verification"> Require email code</label>'
@@ -221,16 +223,12 @@ button,a{{padding:.8rem 1rem;margin-top:14px;border:0;border-radius:8px;font-wei
     return page.encode()
 
 
-def verification_html(token: str, code_sent: bool = False, error: str = "") -> bytes:
-    action = "confirm" if code_sent else "request"
-    field = (
-        '<label>Verification code</label><input name="code" inputmode="numeric" pattern="[0-9]{6}" required>'
-        if code_sent else '<label>Email address</label><input name="email" type="email" required>'
-    )
+def verification_html(token: str, error: str = "") -> bytes:
     return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verify Demo Display</title>
 <style>:root{{color-scheme:dark;font-family:system-ui}}body{{margin:0;background:#090b10;color:#f4f6f8}}main{{width:min(460px,calc(100% - 32px));margin:12vh auto;background:#15191f;padding:28px;border-radius:18px}}label{{display:block;margin:18px 0 8px}}input{{box-sizing:border-box;width:100%;padding:14px}}button{{margin-top:18px;padding:14px;font-weight:800}}</style></head>
-<body><main><h1>Email verification</h1><p>{'Enter the code sent to your email.' if code_sent else 'Enter the authorized email address to receive a six-digit code.'}</p>{f'<p>{escape(error)}</p>' if error else ''}
-<form method="post" action="/display/{escape(token)}/verify/{action}">{field}<button type="submit">{'Verify' if code_sent else 'Send code'}</button></form></main></body></html>""".encode()
+<body><main><h1>Email verification</h1><p>Enter the six-digit code sent to the authorized email address.</p>{f'<p>{escape(error)}</p>' if error else ''}
+<form method="post" action="/display/{escape(token)}/verify/confirm"><label>Verification code</label><input name="code" inputmode="numeric" pattern="[0-9]{{6}}" autocomplete="one-time-code" required><button type="submit">Verify</button></form>
+<form method="post" action="/display/{escape(token)}/verify/request"><button type="submit">Send a new code</button></form></main></body></html>""".encode()
 
 
 def viewer_html(interval: int = 2) -> bytes:
@@ -293,7 +291,12 @@ class Handler(BaseHTTPRequestHandler):
             return True
         if VERIFICATION.required and not VERIFICATION.authorized(self._grant_cookie()):
             if action == "view":
-                self._send(200, verification_html(token), "text/html; charset=utf-8", True, VERIFICATION_CSP)
+                try:
+                    VERIFICATION.ensure_code()
+                    error = ""
+                except VerificationError as delivery_error:
+                    error = str(delivery_error)
+                self._send(200, verification_html(token, error), "text/html; charset=utf-8", True, VERIFICATION_CSP)
             else:
                 self._send(403, b"Email verification required.\n", "text/plain; charset=utf-8", True)
             return True
@@ -466,8 +469,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             form = self._form()
             if action == "verify_request":
-                VERIFICATION.request_code(form.get("email", ""))
-                self._send(200, verification_html(token, True), "text/html; charset=utf-8", True, VERIFICATION_CSP)
+                VERIFICATION.request_code()
+                self._send(200, verification_html(token), "text/html; charset=utf-8", True, VERIFICATION_CSP)
                 return
             snapshot = SESSION.snapshot()
             grant = VERIFICATION.confirm(form.get("code", ""), snapshot.expires_at or time.time())
@@ -479,7 +482,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
             )
         except (UnicodeDecodeError, ValueError, VerificationError) as error:
-            self._send(400, verification_html(token, action == "verify_confirm", str(error)), "text/html; charset=utf-8", True, VERIFICATION_CSP)
+            self._send(400, verification_html(token, str(error)), "text/html; charset=utf-8", True, VERIFICATION_CSP)
 
     def _sync_session(self) -> None:
         current = SESSION.snapshot()

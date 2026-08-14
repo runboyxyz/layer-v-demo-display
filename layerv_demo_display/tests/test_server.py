@@ -14,6 +14,7 @@ from app.server import (
     trusted_ingress,
     viewer_html,
     viewer_csp,
+    verification_html,
 )
 
 
@@ -65,6 +66,32 @@ class ServerTests(unittest.TestCase):
         self.assertIn("form-action 'self'", ADMIN_CSP)
         self.assertIn("frame-ancestors 'none'", VIEWER_CSP)
         self.assertIn("default-src 'none'", VIEWER_CSP)
+
+    def test_verification_asks_only_for_code_and_supports_resend(self):
+        page = verification_html("synthetic-token").decode()
+        self.assertIn("Verification code", page)
+        self.assertIn("Send a new code", page)
+        self.assertNotIn('type="email"', page)
+
+    def test_active_status_has_open_display_and_revoke_controls(self):
+        with patch("app.server.SESSION.snapshot") as snapshot, patch(
+            "app.server.PUBLISHER"
+        ) as publisher:
+            snapshot.return_value.active = True
+            snapshot.return_value.state = "running"
+            snapshot.return_value.token = "synthetic-token"
+            snapshot.return_value.expires_at = 2_000_000_000
+            snapshot.return_value.last_frame_at = None
+            snapshot.return_value.frame_duration = None
+            snapshot.return_value.viewers = 0
+            snapshot.return_value.consecutive_failures = 0
+            publisher.configured = True
+            publisher.connected = True
+            publisher.activation_url = "https://activate.example/q_demo"
+            publisher.remote_url = "https://demo.qurl.site/display/synthetic-token"
+            page = status_html(Settings(), "test").decode()
+        self.assertIn("Open Demo Display", page)
+        self.assertIn("End Session &amp; Revoke qURL", page)
 
     def test_admin_notice_is_one_time_and_bounded(self):
         set_admin_notice("x" * 600)

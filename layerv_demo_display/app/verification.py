@@ -111,11 +111,19 @@ class VerificationGate:
             self._pending = None
             self._grants.clear()
 
-    def request_code(self, supplied_email: str) -> None:
+    def ensure_code(self) -> None:
+        """Send the first code without exposing or asking for the recipient."""
+        with self._lock:
+            pending = self._pending
+            if pending is not None and pending.expires_at > self._clock() and pending.attempts < 5:
+                return
+        self.request_code()
+
+    def request_code(self) -> None:
         with self._lock:
             recipient = self._recipient
-        if not recipient or not hmac.compare_digest(recipient, supplied_email.strip().lower()):
-            raise VerificationError("The email address could not be verified")
+        if not recipient:
+            raise VerificationError("Email verification is not enabled")
         with self._lock:
             if self._last_delivery > self._clock() - 60:
                 raise VerificationError("Wait before requesting another verification code")

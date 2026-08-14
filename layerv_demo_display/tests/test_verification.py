@@ -36,6 +36,21 @@ class VerificationTests(unittest.TestCase):
             verification.configure_smtp({"smtp_host": "", "smtp_from": "bad"})
         self.assertFalse(self.smtp_file.exists())
 
+    @patch("app.verification.smtplib.SMTP")
+    @patch("app.verification.secrets.randbelow", return_value=123456)
+    def test_first_code_is_sent_to_configured_recipient_without_viewer_email(
+        self, _random, smtp
+    ):
+        self.smtp_file.write_text('{"host":"smtp.example","port":25,"from":"demo@example.com"}')
+        gate = verification.VerificationGate(clock=lambda: 1000)
+        gate.begin("viewer@example.com")
+        gate.ensure_code()
+        client = smtp.return_value.__enter__.return_value
+        message = client.send_message.call_args.args[0]
+        self.assertEqual(message["To"], "viewer@example.com")
+        gate.ensure_code()
+        self.assertEqual(client.send_message.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
