@@ -17,11 +17,16 @@ from app.server import (
     verification_html,
     Invitation,
     INVITATIONS,
+    invitation_notice,
 )
 from app.verification import VerificationGate
 
 
 class ServerTests(unittest.TestCase):
+    def test_no_email_notice_does_not_claim_email_was_sent(self):
+        notice = invitation_notice("Demo", "", False)
+        self.assertEqual(notice, "Demo invitation created.")
+        self.assertNotIn("email", notice.lower())
     def test_only_expected_ingress_proxy_is_trusted(self):
         path = "/api/hassio_ingress/example/"
         self.assertTrue(trusted_ingress("172.30.32.2", path))

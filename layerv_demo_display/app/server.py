@@ -131,6 +131,14 @@ def clear_invitations() -> None:
         item.verification.end()
 
 
+def invitation_notice(kind: str, email: str, sent: bool) -> str:
+    if not email:
+        return f"{kind} invitation created."
+    if sent:
+        return f"{kind} invitation created and emailed."
+    return f"{kind} invitation created, but email delivery failed; use the links below."
+
+
 def display_parts(path: str) -> tuple[str, str] | None:
     """Return (token, action) for an exact public display route."""
     parts = path.split("/")
@@ -445,11 +453,7 @@ class Handler(BaseHTTPRequestHandler):
                     lambda token: run_renderer(SESSION, SETTINGS, os.getenv("SUPERVISOR_TOKEN", "")),
                 )
                 sent = self._create_invitation(token, email, require_code)
-                message = (
-                    "Demo invitation created and emailed."
-                    if sent or not email else
-                    "Demo invitation created, but email delivery failed; use the links below."
-                )
+                message = invitation_notice("Demo", email, sent)
                 LOGGER.info("Demo Session started")
             except (RuntimeError, PublicationError, VerificationError) as error:
                 SESSION.end("failed")
@@ -473,11 +477,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise VerificationError("Enter an email when verification is required")
                 token = SESSION.issue_viewer_token()
                 sent = self._create_invitation(token, email, require_code)
-                message = (
-                    "Viewer invitation created and emailed."
-                    if sent or not email else
-                    "Viewer invitation created, but email delivery failed; use the links below."
-                )
+                message = invitation_notice("Viewer", email, sent)
             except (RuntimeError, PublicationError, VerificationError) as error:
                 if 'token' in locals():
                     SESSION.revoke_viewer_token(token)

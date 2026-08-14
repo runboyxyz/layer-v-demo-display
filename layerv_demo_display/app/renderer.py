@@ -43,6 +43,38 @@ async def _bounded(awaitable, deadline: float):
     return await asyncio.wait_for(awaitable, timeout=remaining)
 
 
+async def _apply_chrome_visibility(page, settings) -> None:
+    """Hide HA shell chrome through each open shadow root before capture."""
+    await page.evaluate(
+        """({hideSidebar,hideHeader}) => {
+          const selectors=[];
+          if(hideSidebar)selectors.push('#drawer','ha-sidebar','app-drawer','ha-drawer','[slot="sidebar"]');
+          if(hideHeader)selectors.push('app-header','[slot="header"]');
+          const visit=root=>{
+            for(const selector of selectors){
+              for(const node of root.querySelectorAll(selector)){
+                node.style.setProperty('display','none','important');
+                node.setAttribute('data-demo-display-hidden','');
+              }
+            }
+            for(const node of root.querySelectorAll('*'))if(node.shadowRoot)visit(node.shadowRoot);
+          };
+          visit(document);
+          const roots=[document];
+          for(let index=0;index<roots.length;index++){
+            const root=roots[index];
+            for(const node of root.querySelectorAll('*'))if(node.shadowRoot)roots.push(node.shadowRoot);
+            for(const main of root.querySelectorAll('home-assistant,home-assistant-main')){
+              main.style.setProperty('--mdc-drawer-width','0px');
+              main.style.setProperty('--app-drawer-width','0px');
+            }
+          }
+          window.dispatchEvent(new Event('resize'));
+        }""",
+        {"hideSidebar": settings.hide_ha_sidebar, "hideHeader": settings.hide_ha_header},
+    )
+
+
 async def _capture_loop(session, settings, token: str, startup_complete=None) -> None:
     from playwright.async_api import async_playwright
 
@@ -98,6 +130,7 @@ async def _capture_loop(session, settings, token: str, startup_complete=None) ->
         LOGGER.info("Renderer startup: stage=lovelace")
         await _bounded(page.wait_for_selector("hui-root", state="visible", timeout=45_000), deadline)
         await _bounded(page.wait_for_timeout(2_000), deadline)
+        await _bounded(_apply_chrome_visibility(page, settings), deadline)
         if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
             raise RuntimeError("Home Assistant rejected the App identity")
         session.renderer_started()
@@ -110,6 +143,7 @@ async def _capture_loop(session, settings, token: str, startup_complete=None) ->
                 break
             started = time.monotonic()
             try:
+                await _apply_chrome_visibility(page, settings)
                 frame = await page.screenshot(
                     type="jpeg", quality=75, full_page=False, timeout=20_000
                 )
