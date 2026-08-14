@@ -31,6 +31,8 @@ class RendererProbeTests(unittest.TestCase):
         self.assertNotIn("SUPERVISOR_TOKEN", script)
         self.assertNotIn("externalAppV2", script)
         self.assertNotIn("externalBus", script)
+        self.assertIn("ws://supervisor/core/websocket", script)
+        self.assertIn("String(url) === coreSocket", script)
 
     def test_missing_token_does_not_launch_browser(self):
         result = run_probe(Settings(), "")

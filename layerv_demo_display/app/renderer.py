@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 
 from .renderer_probe import CHROMIUM, HA_ORIGIN, allowed_request, external_auth_script
@@ -15,8 +16,17 @@ LOGGER = logging.getLogger("demo_display.renderer")
 def run_renderer(session, settings, token: str) -> None:
     """Thread entry point; never persist credentials or frames."""
     failed = False
+    startup_complete = threading.Event()
+
+    def expire_stalled_startup() -> None:
+        if not startup_complete.wait(75) and not session.stop_event.is_set():
+            LOGGER.warning("Renderer startup watchdog expired")
+            session.renderer_stopped(failed=True)
+
+    watchdog = threading.Thread(target=expire_stalled_startup, daemon=True)
+    watchdog.start()
     try:
-        asyncio.run(_capture_loop(session, settings, token))
+        asyncio.run(_capture_loop(session, settings, token, startup_complete))
     except Exception as error:
         failed = not session.stop_event.is_set()
         if failed:
@@ -33,7 +43,7 @@ async def _bounded(awaitable, deadline: float):
     return await asyncio.wait_for(awaitable, timeout=remaining)
 
 
-async def _capture_loop(session, settings, token: str) -> None:
+async def _capture_loop(session, settings, token: str, startup_complete=None) -> None:
     from playwright.async_api import async_playwright
 
     width, height = settings.viewport
@@ -91,6 +101,8 @@ async def _capture_loop(session, settings, token: str) -> None:
         if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
             raise RuntimeError("Home Assistant rejected the App identity")
         session.renderer_started()
+        if startup_complete is not None:
+            startup_complete.set()
         LOGGER.info("Renderer started")
 
         while not session.stop_event.is_set():

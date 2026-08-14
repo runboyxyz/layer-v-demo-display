@@ -55,6 +55,20 @@ def external_auth_script() -> str:
     """Return the documented frontend bridge without embedding a credential."""
     return r"""
 (() => {
+  const coreSocket = new URL('/api/websocket', window.location.origin).href
+    .replace(/^http/, 'ws');
+  const supervisorSocket = 'ws://supervisor/core/websocket';
+  const NativeWebSocket = window.WebSocket;
+  const RestrictedWebSocket = function(url, protocols) {
+    const target = String(url) === coreSocket ? supervisorSocket : url;
+    return protocols === undefined
+      ? new NativeWebSocket(target)
+      : new NativeWebSocket(target, protocols);
+  };
+  RestrictedWebSocket.prototype = NativeWebSocket.prototype;
+  Object.setPrototypeOf(RestrictedWebSocket, NativeWebSocket);
+  window.WebSocket = RestrictedWebSocket;
+
   const reply = async (raw) => {
     let message;
     try { message = JSON.parse(raw); } catch (_) { return; }
