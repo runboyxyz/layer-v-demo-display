@@ -1,0 +1,33 @@
+#include <tunables/global>
+
+profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+
+  /usr/local/bin/python rix,
+  /usr/local/bin/python3 rix,
+  /usr/local/bin/python3.12 rix,
+  /usr/local/lib/** mr,
+  /app/{,**} r,
+  /run.sh rix,
+
+  /etc/hosts r,
+  /etc/hostname r,
+  /etc/nsswitch.conf r,
+  /etc/passwd r,
+  /etc/group r,
+  /etc/resolv.conf r,
+  /etc/ssl/certs/{,**} r,
+
+  /data/options.json r,
+  /tmp/{,**} rwk,
+  /dev/null rw,
+  /dev/urandom r,
+
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+
+  signal (receive) set=(int, term),
+}
