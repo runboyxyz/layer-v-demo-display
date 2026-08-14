@@ -130,12 +130,18 @@ def main() -> None:
     finally:
         for process in processes:
             if process.poll() is None:
-                process.terminate()
+                try:
+                    process.terminate()
+                except PermissionError:
+                    LOGGER.warning("Child termination deferred to container shutdown")
         for process in processes:
             try:
                 process.wait(timeout=10)
             except subprocess.TimeoutExpired:
-                process.kill()
+                try:
+                    process.kill()
+                except PermissionError:
+                    LOGGER.warning("Child kill deferred to container shutdown")
         failed = next((process.returncode for process in processes if process.returncode), 0)
     raise SystemExit(failed)
 

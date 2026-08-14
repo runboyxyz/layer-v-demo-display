@@ -21,6 +21,9 @@ class ConfigurationTests(unittest.TestCase):
     def test_accepts_demo_dashboard(self):
         self.assertEqual(validate_dashboard_path("/demo-home/home"), "/demo-home/home")
 
+    def test_accepts_home_assistant_list_value_for_target_fps(self):
+        self.assertEqual(parse_settings({"renderer_target_fps": "5"}).renderer_target_fps, 5)
+
     def test_rejects_external_and_ambiguous_targets(self):
         invalid = (
             "https://evil.example/dashboard", "//evil.example/dashboard",

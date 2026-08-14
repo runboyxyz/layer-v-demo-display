@@ -73,6 +73,8 @@ def parse_settings(value: object) -> Settings:
     if renderer_mode not in {"jpeg", "video"}:
         raise ConfigurationError("Renderer mode must be jpeg or video")
     renderer_target_fps = value.get("renderer_target_fps", 5)
+    if isinstance(renderer_target_fps, str) and renderer_target_fps.isdigit():
+        renderer_target_fps = int(renderer_target_fps)
     if renderer_target_fps not in {5, 10}:
         raise ConfigurationError("Renderer target FPS must be 5 or 10")
     interval = value.get("capture_interval", 1)
