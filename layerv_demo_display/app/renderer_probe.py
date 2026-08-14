@@ -119,14 +119,24 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
         LOGGER.warning("Authentication probe timed out: stage=%s", stage)
         return ProbeResult("failed", f"Probe timed out during {stage}")
     except Exception as error:
-        # Do not log the exception message: browser errors can include URLs and
-        # environment-derived values. Stage and exception type are sufficient
-        # to distinguish confinement, launch, navigation, and capture faults.
-        LOGGER.warning(
-            "Authentication probe failed: stage=%s error_type=%s",
-            stage,
-            type(error).__name__,
-        )
+        # Before a context exists, no token bridge or target URL has been sent
+        # to Chromium. Playwright's launch transcript is therefore safe and is
+        # needed to diagnose HA OS confinement. Once a page can exist, keep all
+        # exception messages redacted because they may contain navigated URLs.
+        if stage in {"chromium_launch", "context"}:
+            LOGGER.warning(
+                "Authentication probe failed before navigation: stage=%s "
+                "error_type=%s detail=%s",
+                stage,
+                type(error).__name__,
+                str(error),
+            )
+        else:
+            LOGGER.warning(
+                "Authentication probe failed: stage=%s error_type=%s",
+                stage,
+                type(error).__name__,
+            )
         return ProbeResult("failed", f"Probe failed during {stage} ({type(error).__name__})")
     finally:
         if context is not None:
