@@ -75,7 +75,30 @@ in-memory frame and will never trigger browser navigation or capture.
 
 - Phase 1 cannot render a dashboard.
 - Phase 1 cannot create a Demo Session or Display URL.
-- ARM64 image build and Home Assistant Green acceptance must be recorded before
-  this version is considered hardware-confirmed.
 - The final Chromium sandbox and AppArmor permissions are not yet established.
 - Resource figures remain estimates until measured on Home Assistant Green.
+
+## Phase 1 Home Assistant Green acceptance
+
+Phase 1 version 0.1.1 was built, installed, started, and restarted successfully
+on a Home Assistant Green running Home Assistant OS 18.2, Supervisor 2026.07.5,
+and Core 2026.8.1 (`aarch64`). Acceptance confirmed:
+
+- Home Assistant recognizes the App as experimental and AppArmor/Ingress
+  enabled;
+- Ingress displays `Demo Session: Not running`;
+- the renderer is not installed and Chromium is not running;
+- restart returns to the same inactive state;
+- reported idle CPU was 0%;
+- reported idle RAM was approximately 31.9 MB;
+- the existing LayerV Gateway remained running throughout installation,
+  troubleshooting, restart, and Ingress testing.
+
+The initial 0.1.0 package revealed that Supervisor-owned `/data/options.json`
+is not readable by a container launched directly as the runtime UID. Version
+0.1.1 reads options in a fixed root bootstrap and permanently drops to UID/GID
+2200 before creating the HTTP listener. Nine unit/security tests cover the
+configuration boundary, inactive status, Ingress trust, security headers, and
+identity drop. Historical 0.1.0 tracebacks may remain visible in Home Assistant
+logs when App data is retained; a later successful Phase 1 startup entry is the
+authoritative acceptance signal.
