@@ -6,12 +6,14 @@ import asyncio
 from dataclasses import dataclass
 import logging
 import os
+import re
 from urllib.parse import urlsplit
 
 
 HA_ORIGIN = os.getenv("HA_FRONTEND_ORIGIN", "http://homeassistant:8123").rstrip("/")
 CHROMIUM = os.getenv("CHROMIUM_EXECUTABLE", "/usr/lib/chromium/chromium")
 LOGGER = logging.getLogger("demo_display.renderer_probe")
+NETWORK_ERROR = re.compile(r"net::(ERR_[A-Z0-9_]+)")
 
 
 @dataclass(frozen=True)
@@ -32,6 +34,12 @@ def allowed_request(url: str, origin: str = HA_ORIGIN) -> bool:
         expected.hostname,
         expected.port,
     )
+
+
+def navigation_error_code(error: Exception) -> str:
+    """Extract only Chromium's non-sensitive network error identifier."""
+    match = NETWORK_ERROR.search(str(error))
+    return match.group(1) if match else "ERR_UNKNOWN"
 
 
 def external_auth_script() -> str:
@@ -123,6 +131,10 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
         # to Chromium. Playwright's launch transcript is therefore safe and is
         # needed to diagnose HA OS confinement. Once a page can exist, keep all
         # exception messages redacted because they may contain navigated URLs.
+        if stage == "navigation":
+            code = navigation_error_code(error)
+            LOGGER.warning("Authentication probe navigation failed: code=%s", code)
+            return ProbeResult("failed", f"Navigation failed ({code})")
         if stage in {"chromium_launch", "context"}:
             LOGGER.warning(
                 "Authentication probe failed before navigation: stage=%s "

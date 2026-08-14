@@ -1,6 +1,11 @@
 import unittest
 
-from app.renderer_probe import allowed_request, external_auth_script, run_probe
+from app.renderer_probe import (
+    allowed_request,
+    external_auth_script,
+    navigation_error_code,
+    run_probe,
+)
 from app.configuration import Settings
 
 
@@ -22,6 +27,11 @@ class RendererProbeTests(unittest.TestCase):
         result = run_probe(Settings(), "")
         self.assertEqual(result.outcome, "failed")
         self.assertIsNone(result.frame)
+
+    def test_navigation_diagnostic_exposes_only_error_code(self):
+        error = Exception("Page.goto: net::ERR_CONNECTION_REFUSED at http://secret/")
+        self.assertEqual(navigation_error_code(error), "ERR_CONNECTION_REFUSED")
+        self.assertEqual(navigation_error_code(Exception("other detail")), "ERR_UNKNOWN")
 
 
 if __name__ == "__main__":
