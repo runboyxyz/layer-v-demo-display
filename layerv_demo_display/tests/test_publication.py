@@ -49,6 +49,19 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(environment["QURL_API_KEY_FILE"], str(publication.SECRET_FILE))
         self.assertEqual(publication.SECRET_FILE.stat().st_mode & 0o777, 0o600)
 
+    @patch("app.publication.subprocess.run")
+    def test_timeout_recovers_route_written_before_late_bootstrap_stall(self, run):
+        def partial_registration(*args, **kwargs):
+            publication.CONNECTOR_CONFIG.write_text("resource_id: r_recovered\n")
+            raise publication.subprocess.TimeoutExpired(args[0], 60)
+
+        run.side_effect = partial_registration
+        publisher = publication.LayerVPublisher()
+        with patch.object(publisher, "start_connector") as start:
+            publisher.connect("synthetic-layer-v-key")
+        self.assertTrue(publisher.configured)
+        start.assert_called_once()
+
     def test_publish_returns_only_qurl_site_plus_display_path(self):
         publication.SECRET_FILE.write_text("synthetic-key")
         publication.CONNECTOR_CONFIG.write_text("resource_id: r_demo\n")

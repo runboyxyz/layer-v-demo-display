@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -22,6 +23,7 @@ CONNECTOR_STATE = DATA_DIR / "connector-state"
 CONNECTOR_LOGS = DATA_DIR / "connector-logs"
 LAYERV_API = os.getenv("LAYERV_API_BASE_URL", "https://api.layerv.ai").rstrip("/")
 RESOURCE_PATTERN = re.compile(r"(?m)^\s*resource_id:\s*[\"']?([^#\s\"']+)")
+LOGGER = logging.getLogger("demo_display.publication")
 
 
 class PublicationError(RuntimeError):
@@ -110,13 +112,41 @@ class LayerVPublisher:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                     text=True,
-                    timeout=35,
+                    timeout=60,
                     check=False,
                 )
-            except (OSError, subprocess.TimeoutExpired) as error:
-                raise PublicationError("LayerV connector registration could not complete") from error
+            except subprocess.TimeoutExpired as error:
+                self._resource_id = self._read_resource_id()
+                if self._resource_id:
+                    LOGGER.info(
+                        "Connector registration recovered: stage=bootstrap category=route_config_present"
+                    )
+                    self.start_connector()
+                    return
+                LOGGER.warning(
+                    "Connector registration failed: stage=bootstrap category=timeout"
+                )
+                raise PublicationError(
+                    "LayerV connector registration timed out before creating a route"
+                ) from error
+            except PermissionError as error:
+                LOGGER.warning(
+                    "Connector registration failed: stage=launch category=permission_denied"
+                )
+                raise PublicationError(
+                    "LayerV connector could not launch under the App security profile"
+                ) from error
+            except OSError as error:
+                LOGGER.warning(
+                    "Connector registration failed: stage=launch category=process_error"
+                )
+                raise PublicationError("LayerV connector registration could not launch") from error
             self._resource_id = self._read_resource_id()
             if completed.returncode != 0 and not self._resource_id:
+                LOGGER.warning(
+                    "Connector registration failed: stage=registration exit_code=%s",
+                    completed.returncode,
+                )
                 SECRET_FILE.unlink(missing_ok=True)
                 raise PublicationError("LayerV rejected connector registration")
             if not self._resource_id:
