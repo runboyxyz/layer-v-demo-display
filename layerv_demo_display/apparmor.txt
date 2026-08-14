@@ -25,6 +25,7 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   /etc/passwd r,
   /etc/group r,
   /etc/resolv.conf r,
+  /etc/ssl/openssl.cnf r,
   /etc/ssl/certs/{,**} r,
 
   /data/options.json r,
