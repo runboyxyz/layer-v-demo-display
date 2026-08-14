@@ -18,6 +18,7 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   /usr/share/fonts/{,**} r,
   /usr/share/fontconfig/{,**} r,
   /var/cache/fontconfig/{,**} r,
+  /etc/fonts/{,**} r,
 
   /etc/hosts r,
   /etc/hostname r,
@@ -31,7 +32,7 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   /data/options.json r,
   /tmp/{,**} rwk,
   /dev/shm/{,**} rwk,
-  /proc/** r,
+  /proc/{,**} r,
   /sys/devices/system/cpu/** r,
   /dev/null rw,
   /dev/urandom r,

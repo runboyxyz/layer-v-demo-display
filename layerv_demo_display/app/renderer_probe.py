@@ -81,10 +81,6 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
                 args=[
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
-                    # Error-level process diagnostics only. Chromium exits
-                    # before navigation in this failure mode, so no dashboard
-                    # URL, credential, or rendered content can be emitted.
-                    "--enable-logging=stderr",
                 ],
             )
             stage = "context"
