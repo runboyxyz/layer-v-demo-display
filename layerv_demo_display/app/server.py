@@ -133,7 +133,7 @@ def status_payload(settings: Settings) -> dict:
         "chromium_running": current.active,
         "dashboard_path": settings.dashboard_path,
         "viewport": {"width": width, "height": height},
-        "capture_interval_seconds": settings.capture_interval,
+        "fallback_refresh_interval_seconds": settings.capture_interval,
         "default_session_duration_minutes": settings.default_session_duration,
         "expires_at": current.expires_at,
         "last_frame_at": current.last_frame_at,
@@ -405,12 +405,29 @@ class Handler(BaseHTTPRequestHandler):
                     if form.get("email_verification") == "on" else ""
                 )
                 VERIFICATION.begin(verification_email)
+                if verification_email and not (PUBLISHER and PUBLISHER.configured):
+                    raise PublicationError(
+                        "Connect LayerV before starting an emailed Demo Session"
+                    )
                 token = SESSION.start(
                     SETTINGS.default_session_duration,
                     lambda token: run_renderer(SESSION, SETTINGS, os.getenv("SUPERVISOR_TOKEN", "")),
                 )
                 if PUBLISHER and PUBLISHER.configured:
                     PUBLISHER.publish(token, SETTINGS.default_session_duration)
+                    if verification_email:
+                        try:
+                            VERIFICATION.send_invitation(
+                                PUBLISHER.activation_url,
+                                PUBLISHER.remote_url,
+                            )
+                            message = "Demo invitation sent to the authorized email address."
+                        except VerificationError as invitation_error:
+                            message = (
+                                "The session started, but the invitation email was not sent: "
+                                + str(invitation_error)
+                                + ". Copy the links below to share them manually."
+                            )
                 LOGGER.info("Demo Session started")
             except (RuntimeError, PublicationError, VerificationError) as error:
                 SESSION.end("failed")

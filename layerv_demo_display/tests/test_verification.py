@@ -51,6 +51,34 @@ class VerificationTests(unittest.TestCase):
         gate.ensure_code()
         self.assertEqual(client.send_message.call_count, 1)
 
+    @patch("app.verification.smtplib.SMTP")
+    def test_invitation_contains_activation_and_display_buttons(self, smtp):
+        self.smtp_file.write_text('{"host":"smtp.example","port":25,"from":"demo@example.com"}')
+        gate = verification.VerificationGate(clock=lambda: 1000)
+        gate.begin("viewer@example.com")
+        gate.send_invitation(
+            "https://activate.example/q_demo",
+            "https://demo.qurl.site/display/synthetic-token",
+        )
+        message = smtp.return_value.__enter__.return_value.send_message.call_args.args[0]
+        self.assertEqual(message["To"], "viewer@example.com")
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+        self.assertIn("https://activate.example/q_demo", plain)
+        self.assertIn("https://demo.qurl.site/display/synthetic-token", plain)
+        self.assertIn("Activate LayerV Access", html)
+        self.assertIn("Open Demo Display", html)
+
+    def test_invitation_rejects_non_https_links(self):
+        self.smtp_file.write_text("{}")
+        gate = verification.VerificationGate(clock=lambda: 1000)
+        gate.begin("viewer@example.com")
+        with self.assertRaises(verification.VerificationError):
+            gate.send_invitation(
+                "javascript:alert(1)",
+                "https://demo.qurl.site/display/synthetic-token",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

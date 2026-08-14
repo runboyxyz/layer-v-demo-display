@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from email.message import EmailMessage
 from hashlib import sha256
+from html import escape
 import hmac
 import json
 import os
@@ -14,6 +15,7 @@ import smtplib
 import ssl
 import threading
 import time
+from urllib.parse import urlsplit
 
 
 SMTP_FILE = Path(os.getenv("APP_DATA_DIR", "/data")) / "secrets" / "smtp.json"
@@ -130,12 +132,47 @@ class VerificationGate:
             self._last_delivery = self._clock()
         code = f"{secrets.randbelow(1_000_000):06d}"
         digest = sha256(code.encode("ascii")).digest()
-        settings = _smtp_settings()
         message = EmailMessage()
         message["Subject"] = "Your LayerV Demo Display code"
+        message.set_content(f"Your verification code is {code}. It expires in 10 minutes.")
+        self._send_message(message, recipient)
+        with self._lock:
+            self._pending = PendingCode(digest, self._clock() + 600)
+
+    def send_invitation(self, activation_url: str, display_url: str) -> None:
+        """Send the two-step LayerV invitation to the configured recipient."""
+        with self._lock:
+            recipient = self._recipient
+        if not recipient:
+            return
+        for value in (activation_url, display_url):
+            parsed = urlsplit(value)
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise VerificationError("LayerV invitation links are unavailable")
+        safe_activation = escape(activation_url, quote=True)
+        safe_display = escape(display_url, quote=True)
+        button = (
+            "display:inline-block;padding:13px 18px;border-radius:10px;"
+            "background:#1769d2;color:#ffffff;text-decoration:none;"
+            "font-size:15px;font-weight:700"
+        )
+        text = (
+            "You have been invited to a temporary LayerV Demo Display.\n\n"
+            f"1. Activate LayerV access:\n{activation_url}\n\n"
+            f"2. Open the Demo Display:\n{display_url}\n\n"
+            "Opening the display sends a separate one-time verification code to this address.\n"
+        )
+        html = f"""<!doctype html><html lang="en"><body style="margin:0;padding:28px 12px;background:#f3f6fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fff;border:1px solid #dfe6ef;border-radius:18px;overflow:hidden"><tr><td style="padding:24px 30px;background:#10233f;color:#fff"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#9fc7ff">LayerV Demo Display</div><h1 style="margin:8px 0 0;font-size:25px">Your demo invitation</h1></td></tr><tr><td style="padding:30px"><p style="margin:0 0 24px;font-size:16px;line-height:1.6">Complete both steps below to view the temporary read-only display.</p><div style="margin:0 0 24px;padding:20px;border:1px solid #dfe6ef;border-radius:12px"><strong>Step 1 — Activate LayerV access</strong><p><a href="{safe_activation}" style="{button}">Activate LayerV Access</a></p><div style="font-size:11px;overflow-wrap:anywhere">{safe_activation}</div></div><div style="margin:0 0 24px;padding:20px;border:1px solid #dfe6ef;border-radius:12px"><strong>Step 2 — Open the read-only display</strong><p><a href="{safe_display}" style="{button}">Open Demo Display</a></p><div style="font-size:11px;overflow-wrap:anywhere">{safe_display}</div></div><p style="color:#66758a;font-size:13px;line-height:1.6">Opening the display sends a separate one-time verification code to this email address.</p></td></tr></table></td></tr></table></body></html>"""
+        message = EmailMessage()
+        message["Subject"] = "Your LayerV Demo Display invitation"
+        message.set_content(text)
+        message.add_alternative(html, subtype="html")
+        self._send_message(message, recipient)
+
+    def _send_message(self, message: EmailMessage, recipient: str) -> None:
+        settings = _smtp_settings()
         message["From"] = settings["from"]
         message["To"] = recipient
-        message.set_content(f"Your verification code is {code}. It expires in 10 minutes.")
         try:
             with smtplib.SMTP(settings["host"], int(settings["port"]), timeout=20) as client:
                 if settings.get("starttls"):
@@ -147,8 +184,6 @@ class VerificationGate:
             with self._lock:
                 self._last_delivery = 0.0
             raise VerificationError("The verification email could not be sent") from error
-        with self._lock:
-            self._pending = PendingCode(digest, self._clock() + 600)
 
     def confirm(self, code: str, session_expires_at: float) -> str:
         with self._lock:
