@@ -56,7 +56,7 @@ TRUSTED_PROXIES = frozenset(
     for item in os.getenv("TRUSTED_INGRESS_PROXIES", "172.30.32.2").split(",")
     if item.strip()
 )
-VIEWER_SCRIPT_TEMPLATE = r"""const image=document.getElementById('frame');const state=document.getElementById('state');const base=location.pathname.replace(/\/$/,'');let fallback=false;const refresh=()=>{const next=new Image();next.onload=()=>{image.src=next.src;state.textContent='LIVE • READ ONLY'};next.onerror=()=>{state.textContent='WAITING FOR DISPLAY…'};next.src=base+'/frame?t='+Date.now()};const polling=()=>{if(fallback)return;fallback=true;refresh();setInterval(refresh,__INTERVAL__)};image.onload=()=>{state.textContent='LIVE • READ ONLY'};image.onerror=polling;image.src=base+'/stream';setTimeout(()=>{if(!image.complete&&image.naturalWidth===0)polling()},5000);"""
+VIEWER_SCRIPT_TEMPLATE = r"""const image=document.getElementById('frame');const video=document.getElementById('video');const state=document.getElementById('state');const base=location.pathname.replace(/\/$/,'');let fallback=false;const refresh=()=>{const next=new Image();next.onload=()=>{image.src=next.src;state.textContent='LIVE • READ ONLY'};next.onerror=()=>{state.textContent='WAITING FOR DISPLAY…'};next.src=base+'/frame?t='+Date.now()};const polling=()=>{if(fallback)return;fallback=true;video.pause();video.hidden=true;image.hidden=false;image.onerror=()=>{refresh();setInterval(refresh,__INTERVAL__)};image.src=base+'/stream'};if(__VIDEO__){video.hidden=false;image.hidden=true;video.onplaying=()=>{state.textContent='LIVE • READ ONLY'};video.onerror=polling;video.src=base+'/video';video.play().catch(polling);setTimeout(()=>{if(video.readyState===0)polling()},5000)}else polling();"""
 ADMIN_SCRIPT = """document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);button.textContent='Copied'}));"""
 ADMIN_SCRIPT_HASH = base64.b64encode(sha256(ADMIN_SCRIPT.encode()).digest()).decode()
 
@@ -72,14 +72,14 @@ ADMIN_CSP = (
 )
 
 
-def viewer_script(interval: int) -> str:
-    return VIEWER_SCRIPT_TEMPLATE.replace("__INTERVAL__", str(interval * 1000))
+def viewer_script(interval: int, video: bool = False) -> str:
+    return VIEWER_SCRIPT_TEMPLATE.replace("__INTERVAL__", str(interval * 1000)).replace("__VIDEO__", "true" if video else "false")
 
 
-def viewer_csp(interval: int) -> str:
-    digest = base64.b64encode(sha256(viewer_script(interval).encode()).digest()).decode()
+def viewer_csp(interval: int, video: bool = False) -> str:
+    digest = base64.b64encode(sha256(viewer_script(interval, video).encode()).digest()).decode()
     return (
-        "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; "
+        "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; media-src 'self'; "
         f"script-src 'sha256-{digest}'; frame-ancestors 'none'; "
         "base-uri 'none'; form-action 'none'"
     )
@@ -148,6 +148,8 @@ def display_parts(path: str) -> tuple[str, str] | None:
         return parts[2], "frame"
     if len(parts) == 4 and parts[:2] == ["", "display"] and parts[2] and parts[3] == "stream":
         return parts[2], "stream"
+    if len(parts) == 4 and parts[:2] == ["", "display"] and parts[2] and parts[3] == "video":
+        return parts[2], "video"
     if (
         len(parts) == 5
         and parts[:2] == ["", "display"]
@@ -162,11 +164,13 @@ def display_parts(path: str) -> tuple[str, str] | None:
 def status_payload(settings: Settings) -> dict:
     width, height = settings.viewport
     current = SESSION.snapshot()
+    performance = SESSION.performance()
     return {
         "development_tool": True,
         "phase": 7,
         "session": current.state,
         "renderer": "periodic" if current.active else "stopped",
+        "renderer_mode": settings.renderer_mode,
         "chromium_running": current.active,
         "dashboard_path": settings.dashboard_path,
         "viewport": {"width": width, "height": height},
@@ -177,6 +181,9 @@ def status_payload(settings: Settings) -> dict:
         "frame_duration_seconds": current.frame_duration,
         "consecutive_failures": current.consecutive_failures,
         "viewers": current.viewers,
+        "current_fps": round(performance["fps"], 2),
+        "average_source_frame_bytes": round(performance["average_source_frame_bytes"]),
+        "encoded_bitrate_bps": round(performance["encoded_bitrate_bps"]),
     }
 
 
@@ -188,6 +195,7 @@ def status_html(settings: Settings, version: str, message: str = "") -> bytes:
     width, height = settings.viewport
     current = SESSION.snapshot()
     active = current.active
+    performance = SESSION.performance()
     expires = (
         datetime.fromtimestamp(current.expires_at).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
         if current.expires_at
@@ -249,6 +257,8 @@ button,a{{padding:.8rem 1rem;margin-top:14px;border:0;border-radius:8px;font-wei
 <dt>Renderer</dt><dd>{escape(current.state)}</dd><dt>Chromium</dt><dd>{'Running' if active else 'Not running'}</dd>
 <dt>LayerV</dt><dd>{publication}</dd><dt>Invitations</dt><dd>{len(invitations)}</dd>
 <dt>Dashboard</dt><dd>{escape(settings.dashboard_path)}</dd><dt>Resolution</dt><dd>{width} × {height}</dd>
+<dt>Renderer mode</dt><dd>{escape(settings.renderer_mode)}</dd><dt>Target FPS</dt><dd>{settings.renderer_target_fps if settings.renderer_mode == 'video' else 'JPEG adaptive'}</dd>
+<dt>Current FPS</dt><dd>{performance['fps']:.1f}</dd><dt>Encoded bitrate</dt><dd>{performance['encoded_bitrate_bps'] / 1_000_000:.2f} Mbps</dd>
 <dt>Refresh</dt><dd>Live stream (1-second fallback)</dd><dt>Expires</dt><dd>{escape(expires)}</dd>
 <dt>Last frame</dt><dd>{escape(_age(current.last_frame_at))}</dd><dt>Capture time</dt><dd>{f'{current.frame_duration:.2f} seconds' if current.frame_duration is not None else '—'}</dd>
 <dt>Viewers</dt><dd>{current.viewers}</dd><dt>Failures</dt><dd>{current.consecutive_failures}</dd></dl>{actions}
@@ -266,13 +276,13 @@ def verification_html(token: str, error: str = "") -> bytes:
 <form method="post" action="/display/{escape(token)}/verify/request"><button type="submit">Send a new code</button></form></main></body></html>""".encode()
 
 
-def viewer_html(interval: int = 2) -> bytes:
-    script = viewer_script(interval)
+def viewer_html(interval: int = 2, video: bool = False) -> bytes:
+    script = viewer_script(interval, video)
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Live Demo Display</title><style>html,body{{margin:0;width:100%;height:100%;overflow:hidden;background:#050608;color:#d7dde5;font-family:system-ui,sans-serif}}
-main{{position:relative;width:100%;height:100%;display:grid;place-items:center}}#frame{{display:block;max-width:100%;max-height:100%;object-fit:contain}}
+main{{position:relative;width:100%;height:100%;display:grid;place-items:center}}#frame,#video{{display:block;max-width:100%;max-height:100%;object-fit:contain}}
 #state{{position:fixed;top:12px;left:14px;padding:7px 10px;border-radius:999px;background:#111820cc;font-size:12px;font-weight:800;letter-spacing:.12em}}</style></head>
-<body><main><img id="frame" alt="Live read-only Home Assistant dashboard"><div id="state">STARTING LIVE DISPLAY…</div></main><script>{script}</script></body></html>""".encode()
+<body><main><video id="video" autoplay muted playsinline hidden></video><img id="frame" alt="Live read-only Home Assistant dashboard"><div id="state">STARTING LIVE DISPLAY…</div></main><script>{script}</script></body></html>""".encode()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -343,13 +353,16 @@ class Handler(BaseHTTPRequestHandler):
         if action == "view":
             self._send(
                 200,
-                viewer_html(SETTINGS.capture_interval),
+                viewer_html(SETTINGS.capture_interval, SETTINGS.renderer_mode == "video"),
                 "text/html; charset=utf-8",
                 True,
-                viewer_csp(SETTINGS.capture_interval),
+                viewer_csp(SETTINGS.capture_interval, SETTINGS.renderer_mode == "video"),
             )
             return True
         viewer = self.client_address[0]
+        if action == "video":
+            self._video_stream(token, viewer)
+            return True
         if action == "stream":
             self._stream(token, viewer)
             return True
@@ -362,6 +375,35 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(200, image, "image/jpeg", True)
         return True
+
+    def _video_stream(self, token: str, viewer: str) -> None:
+        if SETTINGS.renderer_mode != "video":
+            self._send(404, b"Video mode is not active.\n", "text/plain; charset=utf-8", True)
+            return
+        stream_id = secrets.token_urlsafe(12)
+        if not SESSION.open_stream(token, stream_id):
+            self._send(429, b"Too many live viewers.\n", "text/plain; charset=utf-8", True)
+            return
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            for name, value in COMMON_HEADERS.items():
+                self.send_header(name, value)
+            self.end_headers()
+            sequence = 0
+            sent_init = False
+            while SESSION.valid_token(token):
+                initial, sequence, fragment = SESSION.wait_for_video(token, sequence)
+                if initial is not None and not sent_init:
+                    self.wfile.write(initial)
+                    sent_init = True
+                if fragment is not None:
+                    self.wfile.write(fragment)
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            pass
+        finally:
+            SESSION.close_stream(stream_id)
 
     def _stream(self, token: str, viewer: str) -> None:
         stream_id = secrets.token_urlsafe(12)

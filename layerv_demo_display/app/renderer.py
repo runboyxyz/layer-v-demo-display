@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import threading
 import time
 
 from .renderer_probe import CHROMIUM, HA_ORIGIN, allowed_request, external_auth_script
+from .video import FragmentedMP4, ffmpeg_command
 
 
 LOGGER = logging.getLogger("demo_display.renderer")
@@ -75,6 +77,100 @@ async def _apply_chrome_visibility(page, settings) -> None:
     )
 
 
+async def _jpeg_loop(page, session, settings) -> None:
+    while not session.stop_event.is_set() and session.snapshot().active:
+        started = time.monotonic()
+        try:
+            await _apply_chrome_visibility(page, settings)
+            frame = await page.screenshot(type="jpeg", quality=75, full_page=False, timeout=20_000)
+            session.publish_frame(frame, time.monotonic() - started)
+        except Exception as error:
+            failures = session.renderer_failure()
+            LOGGER.warning("Frame capture failed: attempt=%s error_type=%s", failures, type(error).__name__)
+            if failures >= 3:
+                raise RuntimeError("Frame capture retry limit reached") from error
+        await asyncio.to_thread(session.stop_event.wait, 0.1)
+
+
+async def _video_loop(context, page, session, settings) -> None:
+    """Encode newest-frame-only CDP JPEGs into a shared low-latency fMP4 stream."""
+    width, height = settings.viewport
+    process = await asyncio.create_subprocess_exec(
+        *ffmpeg_command(width, height, settings.renderer_target_fps),
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    cdp = await context.new_cdp_session(page)
+    frames: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1)
+    parser = FragmentedMP4()
+
+    async def on_frame(parameters):
+        await cdp.send("Page.screencastFrameAck", {"sessionId": parameters["sessionId"]})
+        try:
+            value = base64.b64decode(parameters["data"], validate=True)
+        except (ValueError, TypeError):
+            return
+        if frames.full():
+            frames.get_nowait()
+        frames.put_nowait(value)
+
+    async def read_output():
+        assert process.stdout is not None
+        while value := await process.stdout.read(65_536):
+            fragments = parser.feed(value)
+            if parser.init_segment is not None:
+                session.publish_video_init(parser.init_segment)
+            for fragment in fragments:
+                session.publish_video_fragment(fragment)
+
+    async def drain_errors():
+        assert process.stderr is not None
+        while line := await process.stderr.readline():
+            LOGGER.warning("Video encoder diagnostic: %s", line.decode("utf-8", "replace").strip()[:300])
+
+    cdp.on("Page.screencastFrame", on_frame)
+    reader = asyncio.create_task(read_output())
+    diagnostics = asyncio.create_task(drain_errors())
+    await cdp.send("Page.startScreencast", {
+        "format": "jpeg", "quality": 60, "maxWidth": width, "maxHeight": height,
+        "everyNthFrame": 1,
+    })
+    LOGGER.info("Experimental video encoder started: resolution=%sx%s target_fps=%s", width, height, settings.renderer_target_fps)
+    latest = None
+    interval = 1 / settings.renderer_target_fps
+    try:
+        while not session.stop_event.is_set() and session.snapshot().active:
+            started = time.monotonic()
+            try:
+                latest = await asyncio.wait_for(frames.get(), timeout=interval)
+            except asyncio.TimeoutError:
+                pass
+            if latest is not None:
+                session.publish_frame(latest, time.monotonic() - started)
+                assert process.stdin is not None
+                process.stdin.write(latest)
+                await process.stdin.drain()
+            if process.returncode is not None:
+                raise RuntimeError("Video encoder stopped")
+            remaining = interval - (time.monotonic() - started)
+            if remaining > 0:
+                await asyncio.to_thread(session.stop_event.wait, remaining)
+    finally:
+        try:
+            await cdp.send("Page.stopScreencast")
+        except Exception:
+            pass
+        if process.stdin is not None:
+            process.stdin.close()
+        try:
+            await asyncio.wait_for(process.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            process.terminate()
+            await process.wait()
+        await asyncio.gather(reader, diagnostics, return_exceptions=True)
+
+
 async def _capture_loop(session, settings, token: str, startup_complete=None) -> None:
     from playwright.async_api import async_playwright
 
@@ -138,26 +234,14 @@ async def _capture_loop(session, settings, token: str, startup_complete=None) ->
             startup_complete.set()
         LOGGER.info("Renderer started")
 
-        while not session.stop_event.is_set():
-            if not session.snapshot().active:
-                break
-            started = time.monotonic()
+        if settings.renderer_mode == "video":
             try:
-                await _apply_chrome_visibility(page, settings)
-                frame = await page.screenshot(
-                    type="jpeg", quality=75, full_page=False, timeout=20_000
-                )
-                session.publish_frame(frame, time.monotonic() - started)
+                await _video_loop(context, page, session, settings)
             except Exception as error:
-                failures = session.renderer_failure()
-                LOGGER.warning(
-                    "Frame capture failed: attempt=%s error_type=%s", failures, type(error).__name__
-                )
-                if failures >= 3:
-                    raise RuntimeError("Frame capture retry limit reached") from error
-            # Chromium capture takes roughly 350 ms on HA Green. A short pause
-            # produces a shared 2–3 FPS stream without continuously pegging it.
-            await asyncio.to_thread(session.stop_event.wait, 0.1)
+                LOGGER.warning("Experimental video failed; falling back to JPEG: error_type=%s", type(error).__name__)
+                await _jpeg_loop(page, session, settings)
+        else:
+            await _jpeg_loop(page, session, settings)
     finally:
         if stop_task is not None:
             stop_task.cancel()

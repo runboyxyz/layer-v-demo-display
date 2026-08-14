@@ -27,7 +27,7 @@ COPY run.sh /run.sh
 COPY --from=connector /usr/local/bin/qurl-connector /usr/local/bin/qurl-connector
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends chromium fonts-liberation \
+    && apt-get install -y --no-install-recommends chromium ffmpeg fonts-liberation \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir playwright==1.61.0 \
     && groupadd --gid 2202 demo-runtime \

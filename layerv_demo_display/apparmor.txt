@@ -14,6 +14,7 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   /app/{,**} r,
   /run.sh rix,
   /usr/lib/chromium/chromium rix,
+  /usr/bin/ffmpeg rix,
   /usr/lib/chromium/{,**} mrrix,
   /usr/share/chromium/{,**} r,
   /usr/share/fonts/{,**} r,

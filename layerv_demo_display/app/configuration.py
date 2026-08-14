@@ -21,6 +21,8 @@ class ConfigurationError(ValueError):
 class Settings:
     dashboard_path: str = "/demo-home/home"
     resolution: str = "1920x1080"
+    renderer_mode: str = "jpeg"
+    renderer_target_fps: int = 5
     capture_interval: int = 1
     default_session_duration: int = 60
     hide_ha_sidebar: bool = True
@@ -67,6 +69,12 @@ def parse_settings(value: object) -> Settings:
     resolution = value.get("resolution", "1920x1080")
     if resolution not in RESOLUTIONS:
         raise ConfigurationError("Resolution must be 1280x720 or 1920x1080")
+    renderer_mode = value.get("renderer_mode", "jpeg")
+    if renderer_mode not in {"jpeg", "video"}:
+        raise ConfigurationError("Renderer mode must be jpeg or video")
+    renderer_target_fps = value.get("renderer_target_fps", 5)
+    if renderer_target_fps not in {5, 10}:
+        raise ConfigurationError("Renderer target FPS must be 5 or 10")
     interval = value.get("capture_interval", 1)
     if isinstance(interval, bool) or not isinstance(interval, int) or not 1 <= interval <= 10:
         raise ConfigurationError("Capture interval must be from 1 to 10 seconds")
@@ -76,6 +84,8 @@ def parse_settings(value: object) -> Settings:
     return Settings(
         dashboard_path=validate_dashboard_path(value.get("dashboard_path", "/demo-home/home")),
         resolution=resolution,
+        renderer_mode=renderer_mode,
+        renderer_target_fps=renderer_target_fps,
         capture_interval=interval,
         default_session_duration=duration,
         hide_ha_sidebar=_boolean(value.get("hide_ha_sidebar", True), "Hide sidebar"),

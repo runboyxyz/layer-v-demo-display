@@ -38,6 +38,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(display_parts("/display/token"), ("token", "view"))
         self.assertEqual(display_parts("/display/token/frame"), ("token", "frame"))
         self.assertEqual(display_parts("/display/token/stream"), ("token", "stream"))
+        self.assertEqual(display_parts("/display/token/video"), ("token", "video"))
         self.assertEqual(
             display_parts("/display/token/verify/request"),
             ("token", "verify_request"),
@@ -68,6 +69,14 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn("homeassistant", page.lower())
         self.assertNotIn("iframe", page.lower())
         self.assertIn("script-src 'sha256-", viewer_csp(3))
+
+    def test_video_viewer_uses_protected_video_then_image_fallback(self):
+        page = viewer_html(3, video=True).decode()
+        self.assertIn("/video", page)
+        self.assertIn("/stream", page)
+        self.assertIn("/frame?t=", page)
+        self.assertNotIn("homeassistant", page.lower())
+        self.assertNotIn("iframe", page.lower())
 
     def test_security_headers_separate_admin_and_viewer(self):
         self.assertEqual(COMMON_HEADERS["Cache-Control"], "no-store")

@@ -94,6 +94,19 @@ class SessionTests(unittest.TestCase):
         self.assertTrue(self.session.valid_token(second))
         self.assertTrue(self.session.snapshot().active)
 
+    def test_video_fragments_are_bounded_and_token_protected(self):
+        token = self.start()
+        self.session.publish_video_init(b"init")
+        for index in range(8):
+            self.session.publish_video_fragment(f"fragment-{index}".encode())
+        initial, sequence, fragment = self.session.wait_for_video(token, 0, timeout=0)
+        self.assertEqual(initial, b"init")
+        self.assertEqual(sequence, 8)
+        self.assertEqual(fragment, b"fragment-7")
+        self.assertEqual(self.session.wait_for_video("wrong", 8, timeout=0)[2], None)
+        metrics = self.session.performance()
+        self.assertGreater(metrics["encoded_bitrate_bps"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

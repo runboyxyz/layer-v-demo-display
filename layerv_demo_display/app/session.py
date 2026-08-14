@@ -42,6 +42,11 @@ class DemoSession:
         self._requests: dict[str, deque[float]] = defaultdict(deque)
         self._streams: set[str] = set()
         self._frame_sequence = 0
+        self._video_init: bytes | None = None
+        self._video_fragments: deque[tuple[int, bytes]] = deque(maxlen=4)
+        self._video_sequence = 0
+        self._frame_samples: deque[tuple[float, int]] = deque(maxlen=600)
+        self._video_samples: deque[tuple[float, int]] = deque(maxlen=300)
         self.stop_event = threading.Event()
         self.worker: threading.Thread | None = None
 
@@ -63,6 +68,11 @@ class DemoSession:
             self._requests.clear()
             self._streams.clear()
             self._frame_sequence = 0
+            self._video_init = None
+            self._video_fragments.clear()
+            self._video_sequence = 0
+            self._frame_samples.clear()
+            self._video_samples.clear()
             self.stop_event = threading.Event()
             self.worker = threading.Thread(
                 target=worker_target, args=(token,), name="demo-renderer", daemon=True
@@ -89,6 +99,7 @@ class DemoSession:
             self._frame = frame
             self._last_frame_at = self._clock()
             self._frame_duration = duration
+            self._frame_samples.append((self._clock(), len(frame)))
             self._failures = 0
             self._state = "running"
             self._frame_sequence += 1
@@ -187,6 +198,51 @@ class DemoSession:
             self._viewers[viewer] = self._clock()
             return self._frame_sequence, self._frame
 
+    def publish_video_init(self, value: bytes) -> None:
+        with self._frame_ready:
+            if self._token is not None and not self.stop_event.is_set():
+                self._video_init = value
+                self._frame_ready.notify_all()
+
+    def publish_video_fragment(self, value: bytes) -> None:
+        with self._frame_ready:
+            if self._token is None or self.stop_event.is_set():
+                return
+            self._video_sequence += 1
+            self._video_fragments.append((self._video_sequence, value))
+            self._video_samples.append((self._clock(), len(value)))
+            self._frame_ready.notify_all()
+
+    def wait_for_video(
+        self, token: str, after_sequence: int, timeout: float = 5.0
+    ) -> tuple[bytes | None, int, bytes | None]:
+        with self._frame_ready:
+            deadline = time.monotonic() + timeout
+            while self._video_init is None or self._video_sequence <= after_sequence:
+                self._expire_locked()
+                if not self._valid_token_locked(token):
+                    return None, self._video_sequence, None
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return self._video_init, self._video_sequence, None
+                self._frame_ready.wait(remaining)
+            fragment = self._video_fragments[-1][1] if self._video_fragments else None
+            return self._video_init, self._video_sequence, fragment
+
+    def performance(self, window: float = 30.0) -> dict[str, float]:
+        with self._lock:
+            cutoff = self._clock() - window
+            frames = [(stamp, size) for stamp, size in self._frame_samples if stamp > cutoff]
+            video = [(stamp, size) for stamp, size in self._video_samples if stamp > cutoff]
+            elapsed = max(1.0, min(window, self._clock() - frames[0][0])) if frames else window
+            return {
+                "fps": len(frames) / elapsed,
+                "average_source_frame_bytes": (
+                    sum(size for _, size in frames) / len(frames) if frames else 0.0
+                ),
+                "encoded_bitrate_bps": sum(size for _, size in video) * 8 / elapsed,
+            }
+
     def snapshot(self) -> SessionSnapshot:
         with self._lock:
             self._expire_locked()
@@ -224,5 +280,9 @@ class DemoSession:
         self._viewers.clear()
         self._requests.clear()
         self._streams.clear()
+        self._video_init = None
+        self._video_fragments.clear()
+        self._frame_samples.clear()
+        self._video_samples.clear()
         self._state = state
         self._frame_ready.notify_all()

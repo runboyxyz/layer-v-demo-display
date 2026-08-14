@@ -11,6 +11,8 @@ class ConfigurationTests(unittest.TestCase):
         settings = parse_settings({})
         self.assertEqual(settings.viewport, (1920, 1080))
         self.assertEqual(settings.capture_interval, 1)
+        self.assertEqual(settings.renderer_mode, "jpeg")
+        self.assertEqual(settings.renderer_target_fps, 5)
 
     @patch.dict("os.environ", {"APP_SETTINGS_JSON": json.dumps({"capture_interval": 4})})
     def test_validated_runtime_settings_avoid_supervisor_owned_file(self):
@@ -33,6 +35,7 @@ class ConfigurationTests(unittest.TestCase):
         for options in (
             {"resolution": "800x600"}, {"capture_interval": 0},
             {"default_session_duration": 61}, {"hide_ha_header": "yes"},
+            {"renderer_mode": "webrtc"}, {"renderer_target_fps": 30},
         ):
             with self.subTest(options=options), self.assertRaises(ConfigurationError):
                 parse_settings(options)
