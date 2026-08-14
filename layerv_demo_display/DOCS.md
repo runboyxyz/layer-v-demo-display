@@ -9,12 +9,14 @@ Assistant frontend, session, API, cookies, or credentials.
 
 ## Current Phase 1 behavior
 
-Version 0.1.0 provides only:
+Version 0.1.1 provides only:
 
 - Home Assistant App packaging for `aarch64`;
 - an administrator-only Home Assistant Ingress status page;
 - validated future renderer settings;
-- a non-root, dependency-free Python web server;
+- a dependency-free Python web server that reads Supervisor-owned options in a
+  fixed root bootstrap and drops permanently to a dedicated non-root identity
+  before opening its listener;
 - an enforced AppArmor allowlist.
 
 There is no Chromium package, renderer, display listener, public display URL,

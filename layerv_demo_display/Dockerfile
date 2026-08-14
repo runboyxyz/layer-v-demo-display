@@ -1,7 +1,7 @@
 FROM python:3.12-slim-bookworm
 
 ARG BUILD_ARCH
-ARG BUILD_VERSION=0.1.0
+ARG BUILD_VERSION=0.1.1
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -24,7 +24,6 @@ RUN useradd --uid 2200 --user-group --create-home --shell /usr/sbin/nologin demo
     && chmod 0755 /run.sh \
     && chown -R demo-display:demo-display /app
 
-USER demo-display
 EXPOSE 8099
 STOPSIGNAL SIGTERM
 CMD ["/run.sh"]

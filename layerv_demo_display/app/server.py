@@ -14,6 +14,9 @@ from .configuration import ConfigurationError, Settings, load_settings
 
 LOGGER = logging.getLogger("demo_display")
 PORT = int(os.getenv("INGRESS_PORT", "8099"))
+RUNTIME_UID = int(os.getenv("APP_RUNTIME_UID", "2200"))
+RUNTIME_GID = int(os.getenv("APP_RUNTIME_GID", "2200"))
+SETTINGS = Settings()
 TRUSTED_PROXIES = frozenset(
     item.strip()
     for item in os.getenv("TRUSTED_INGRESS_PROXIES", "172.30.32.2").split(",")
@@ -37,6 +40,17 @@ def trusted_ingress(client_ip: str, ingress_path: str) -> bool:
         and "\r" not in ingress_path
         and "\n" not in ingress_path
     )
+
+
+def drop_runtime_identity(uid: int = RUNTIME_UID, gid: int = RUNTIME_GID) -> None:
+    """Permanently drop the root bootstrap identity before serving HTTP."""
+    if os.geteuid() != 0:
+        return
+    os.setgroups([])
+    os.setgid(gid)
+    os.setuid(uid)
+    if os.geteuid() == 0 or os.getegid() == 0:
+        raise RuntimeError("Could not drop the bootstrap identity")
 
 
 def status_payload(settings: Settings) -> dict:
@@ -111,12 +125,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(403, b"Forbidden\n", "text/plain; charset=utf-8")
             return
         path = urlsplit(self.path).path.rstrip("/") or "/"
-        try:
-            settings = load_settings()
-        except ConfigurationError:
-            LOGGER.exception("App configuration is invalid")
-            self._send(500, b"App configuration is invalid.\n", "text/plain; charset=utf-8")
-            return
+        settings = SETTINGS
         if path == "/api/status":
             body = json.dumps(status_payload(settings), separators=(",", ":")).encode("utf-8")
             self._send(200, body, "application/json")
@@ -131,8 +140,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    global SETTINGS
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    load_settings()
+    # Supervisor owns /data/options.json as root. Read it once, then discard
+    # root before the network listener is created. App option changes already
+    # require the normal Home Assistant App restart.
+    SETTINGS = load_settings()
+    drop_runtime_identity()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     LOGGER.info("LayerV Demo Display Phase 1 started: renderer=absent session=inactive")
     try:

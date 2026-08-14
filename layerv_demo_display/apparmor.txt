@@ -29,5 +29,10 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   network inet dgram,
   network inet6 dgram,
 
+  # The fixed root bootstrap reads Supervisor-owned options, then permanently
+  # drops to the dedicated runtime identity before binding the HTTP listener.
+  capability setuid,
+  capability setgid,
+
   signal (receive) set=(int, term),
 }
