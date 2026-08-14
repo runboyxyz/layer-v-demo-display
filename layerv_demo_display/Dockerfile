@@ -35,12 +35,12 @@ RUN apt-get update \
     && useradd --uid 2201 --gid 2202 --create-home --shell /usr/sbin/nologin demo-connector \
     && chmod 0755 /run.sh /usr/local/bin/qurl-connector \
     && test -x /usr/local/bin/qurl-connector \
-    && mkdir -p /data/secrets /data/connector-secrets /data/connector-config /data/connector-state /data/connector-logs \
+    && mkdir -p /data/secrets /data/connector-secrets /data/connector-config-v2 /data/connector-state-v2 /data/connector-logs-v2 \
     && mkdir -p /var/log/layerv \
-    && ln -s /data/connector-logs /var/log/layerv/qurl-connector \
+    && ln -s /data/connector-logs-v2 /var/log/layerv/qurl-connector \
     && chown -R root:demo-runtime /app \
     && chown -R demo-server:demo-runtime /data/secrets \
-    && chown -R demo-connector:demo-runtime /data/connector-secrets /data/connector-config /data/connector-state /data/connector-logs
+    && chown -R demo-connector:demo-runtime /data/connector-secrets /data/connector-config-v2 /data/connector-state-v2 /data/connector-logs-v2
 
 EXPOSE 8099
 STOPSIGNAL SIGTERM

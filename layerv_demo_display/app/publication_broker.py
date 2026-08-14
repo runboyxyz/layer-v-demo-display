@@ -48,6 +48,8 @@ class Handler(socketserver.StreamRequestHandler):
             self._reply({"ok": True, "value": value})
         except (PublicationError, ValueError, TypeError, json.JSONDecodeError) as error:
             self._reply({"ok": False, "error": str(error)[:300]})
+        except OSError:
+            self._reply({"ok": False, "error": "LayerV publisher storage is unavailable"})
 
     def _reply(self, value: dict) -> None:
         self.wfile.write(json.dumps(value, separators=(",", ":")).encode() + b"\n")

@@ -17,9 +17,9 @@ import uuid
 
 DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/data"))
 SECRET_FILE = DATA_DIR / "connector-secrets" / "layerv-api-key"
-CONNECTOR_CONFIG = DATA_DIR / "connector-config" / "qurl-proxy.yaml"
-CONNECTOR_STATE = DATA_DIR / "connector-state"
-CONNECTOR_LOGS = DATA_DIR / "connector-logs"
+CONNECTOR_CONFIG = DATA_DIR / "connector-config-v2" / "qurl-proxy.yaml"
+CONNECTOR_STATE = DATA_DIR / "connector-state-v2"
+CONNECTOR_LOGS = DATA_DIR / "connector-logs-v2"
 INSTALLATION_FILE = CONNECTOR_STATE / "installation-id"
 LAYERV_API = os.getenv("LAYERV_API_BASE_URL", "https://api.layerv.ai").rstrip("/")
 RESOURCE_PATTERN = re.compile(r"(?m)^\s*resource_id:\s*[\"']?([^#\s\"']+)")

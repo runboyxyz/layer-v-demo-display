@@ -52,11 +52,13 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("--uid 2200 --gid 2202", dockerfile)
         self.assertIn("--uid 2201 --gid 2202", dockerfile)
         self.assertIn("/data/connector-secrets", dockerfile)
+        self.assertIn("/data/connector-state-v2", dockerfile)
 
     def test_installation_id_is_not_written_at_data_root(self):
         source = (Path(__file__).parents[1] / "app" / "publication.py").read_text()
         self.assertIn('INSTALLATION_FILE = CONNECTOR_STATE / "installation-id"', source)
         self.assertNotIn('DATA_DIR / "layerv-installation-id"', source)
+        self.assertIn('DATA_DIR / "connector-state-v2"', source)
 
 
 if __name__ == "__main__":
