@@ -40,11 +40,16 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   network inet6 stream,
   network inet dgram,
   network inet6 dgram,
+  # Chromium's browser, renderer, and utility processes communicate only
+  # inside the container over Unix-domain IPC and same-profile signals.
+  network unix stream,
+  network unix dgram,
 
   # The fixed root bootstrap reads Supervisor-owned options, then permanently
   # drops to the dedicated runtime identity before binding the HTTP listener.
   capability setuid,
   capability setgid,
 
+  signal (send, receive) peer=layerv_demo_display,
   signal (receive) set=(int, term),
 }
