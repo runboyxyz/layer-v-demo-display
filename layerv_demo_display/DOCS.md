@@ -22,6 +22,10 @@ measured; the browser remains a non-root UID under the AppArmor profile. This
 tradeoff must be revisited before periodic rendering. There is still no public
 display listener, display token, session, capture loop, or LayerV integration.
 
+The ARM64 image is built on GitHub's native ARM64 runner and published as the
+versioned `ghcr.io/runboyxyz/layer-v-demo-display` package. Home Assistant Green
+pulls that image instead of compiling Chromium locally.
+
 ## Phase 1 baseline
 
 Version 0.1.1 provides only:

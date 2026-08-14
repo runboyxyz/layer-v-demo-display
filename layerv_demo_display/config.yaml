@@ -3,6 +3,8 @@ version: "0.2.0"
 slug: layerv_demo_display
 description: DEVELOPMENT TOOL - remotely show rendered dashboard pixels during LayerV demonstrations
 url: https://github.com/runboyxyz/layer-v-demo-display
+image: ghcr.io/runboyxyz/layer-v-demo-display
+image: ghcr.io/runboyxyz/layer-v-demo-display
 arch:
   - aarch64
 startup: application
