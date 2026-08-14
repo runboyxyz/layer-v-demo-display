@@ -1,5 +1,5 @@
 name: LayerV Demo Display
-version: "0.2.13"
+version: "0.3.0"
 slug: layerv_demo_display
 description: DEVELOPMENT TOOL - remotely show rendered dashboard pixels during LayerV demonstrations
 url: https://github.com/runboyxyz/layer-v-demo-display
@@ -13,6 +13,10 @@ stage: experimental
 apparmor: true
 ingress: true
 ingress_port: 8099
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: Token-protected read-only Demo Display
 panel_admin: true
 panel_icon: mdi:monitor-eye
 panel_title: Demo Display

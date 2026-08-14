@@ -7,20 +7,24 @@ Assistant dashboard locally and send only encoded image frames to a temporary,
 token-protected display page. The remote viewer will never receive the Home
 Assistant frontend, session, API, cookies, or credentials.
 
-## Current authentication experiment
+## Current implementation
 
-Version 0.2.0 adds Debian ARM64 Chromium and Python Playwright only to this
-standalone App. The Ingress administrator can run one bounded authentication
-probe. It creates a fresh browser context, supplies the App-scoped system token
-through Home Assistant's documented external-authentication bridge, restricts
-network requests to the fixed internal HA Green origin at `homeassistant:80`, captures at most one
-in-memory JPEG, and closes the context and browser in all result paths.
+Version 0.3.0 adds one temporary Demo Session. The Ingress administrator starts
+and ends it explicitly. A dedicated non-root renderer launches Debian ARM64
+Chromium, authenticates through Home Assistant's external-authentication bridge
+using the App-scoped system token, restricts browser traffic to the fixed
+`homeassistant:80` origin, and maintains one current in-memory JPEG.
 
-This is an experiment, not a supported session renderer. It deliberately uses
+This remains an experiment. It deliberately uses
 Chromium's `--no-sandbox` mode because HA OS container namespaces must first be
-measured; the browser remains a non-root UID under the AppArmor profile. This
-tradeoff must be revisited before periodic rendering. There is still no public
-display listener, display token, session, capture loop, or LayerV integration.
+measured; Chromium remains a non-root UID under the AppArmor profile. This
+tradeoff must be revisited before production use. LayerV integration is not yet
+implemented.
+
+The renderer captures independently at the configured interval. Viewer
+requests return only the latest existing JPEG and never cause navigation or a
+new screenshot. End, expiry, renderer failure, App shutdown, and SIGTERM all
+invalidate the token, erase the frame, signal the renderer, and close Chromium.
 
 The ARM64 image is built on GitHub's native ARM64 runner and published as the
 versioned `ghcr.io/runboyxyz/layer-v-demo-display` package. Home Assistant Green
@@ -55,13 +59,28 @@ configuration, routes, data, credentials, images, or containers.
 
 - `dashboard_path`: a relative local HA path such as `/demo-home/home`.
 - `resolution`: `1280x720` or `1920x1080`.
-- `capture_interval`: future capture interval, 1–10 seconds; default 2.
+- `capture_interval`: capture interval, 1–10 seconds; default 2.
 - `default_session_duration`: 15, 30, 60, or 120 minutes; default 60.
-- `hide_ha_sidebar` and `hide_ha_header`: future rendering preferences.
+- `hide_ha_sidebar` and `hide_ha_header`: accepted settings; chrome hiding is
+  not yet implemented.
 
 Configuration validation rejects absolute URLs, scheme-relative URLs, query
 strings, fragments, traversal, backslashes, control characters, unsupported
-resolutions, and unsupported lifetimes. Phase 1 never navigates to the path.
+resolutions, and unsupported lifetimes.
+
+## Demo Session and viewer
+
+Open the Ingress UI and select **Start Demo Session**. The page shows the
+high-entropy display path, expiry, renderer health, last-frame age, capture
+duration, approximate viewer count, and consecutive failures. Only one session
+may be active. **End Demo Session** revokes it immediately.
+
+The App maps TCP port 8099 for the token-protected viewer. Until LayerV
+publication is implemented, combine the displayed path with the App host and
+port for a local test, for example `http://HA-HOST:8099/display/TOKEN`. Treat
+the path as a bearer secret. The page contains only minimal display HTML/JS and
+JPEG pixels; it contains no HA frontend code, cookie, API URL, WebSocket
+credential, iframe, or interactive dashboard surface.
 
 ## Removal
 
@@ -69,33 +88,31 @@ Stop and uninstall **LayerV Demo Display** from Home Assistant. Select removal
 of App data if offered. This removes only Demo Display state. It does not alter
 the LayerV Gateway or Home Assistant dashboards.
 
-## Authentication gate
+## Authentication result
 
-Renderer work remains blocked on an on-device authentication experiment. The
-first candidate is Home Assistant's documented external-frontend authentication
-bridge backed by the App-scoped Supervisor token. If that system identity does
-not support a complete Lovelace session, the fallback is a dedicated non-admin
-HA user authorized through the documented authorization-code flow. Username and
-password browser automation is explicitly prohibited.
+The App-scoped Supervisor identity successfully authenticated and captured the
+configured Demo Home dashboard on the HA Green. No username/password browser
+automation or persistent browser profile is used.
 
 ## Security boundary
 
-The Ingress listener trusts only Home Assistant's Ingress proxy address and a
-valid Ingress prefix. It sends no-store, restrictive CSP, no-referrer, and
-nosniff headers. Request targets are not logged because Ingress paths may carry
-authentication material.
-
-Future public display service and renderer processes will use separate Unix
-identities. The public process will not receive or be able to read Home
-Assistant credentials. Viewer requests will return only a previously rendered
-in-memory frame and will never trigger browser navigation or capture.
+Admin endpoints trust only Home Assistant's Ingress proxy address and prefix.
+Public routes accept only `/display/TOKEN` and `/display/TOKEN/frame`; the token
+cannot authorize admin or renderer configuration. Tokens use
+`secrets.token_urlsafe(32)`, remain only in memory, are compared in constant
+time, and are never logged. Frame requests are limited to 10 per 10 seconds per
+source address. Admin and viewer responses use separate restrictive CSPs plus
+no-store, no-referrer, and nosniff headers.
 
 ## Known limitations
 
-- Phase 1 cannot render a dashboard.
-- Phase 1 cannot create a Demo Session or Display URL.
-- The final Chromium sandbox and AppArmor permissions are not yet established.
-- Resource figures remain estimates until measured on Home Assistant Green.
+- LayerV publication is not yet implemented; port 8099 is for the current local
+  viewer test.
+- The renderer has three bounded frame retries but not yet one full controlled
+  Chromium restart.
+- HA sidebar/header hiding is not yet implemented.
+- Chromium uses `--no-sandbox` inside the non-root AppArmor-confined container.
+- Active resource figures and 720p/1080p comparison remain to be measured.
 
 ## Phase 1 Home Assistant Green acceptance
 
