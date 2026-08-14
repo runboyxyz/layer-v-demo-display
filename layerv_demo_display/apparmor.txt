@@ -8,9 +8,11 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   /usr/local/bin/python3 rix,
   /usr/local/bin/python3.12 rix,
   /usr/local/lib/** mr,
+  # Playwright's Python client starts this fixed, packaged protocol driver.
+  /usr/local/lib/python3.12/site-packages/playwright/driver/node rix,
   /app/{,**} r,
   /run.sh rix,
-  /usr/bin/chromium rix,
+  /usr/lib/chromium/chromium rix,
   /usr/lib/chromium/{,**} mrrix,
   /usr/share/chromium/{,**} r,
   /usr/share/fonts/{,**} r,

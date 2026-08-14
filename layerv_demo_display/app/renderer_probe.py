@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 
 HA_ORIGIN = os.getenv("HA_FRONTEND_ORIGIN", "http://homeassistant:8123").rstrip("/")
-CHROMIUM = os.getenv("CHROMIUM_EXECUTABLE", "/usr/bin/chromium")
+CHROMIUM = os.getenv("CHROMIUM_EXECUTABLE", "/usr/lib/chromium/chromium")
 LOGGER = logging.getLogger("demo_display.renderer_probe")
 
 
@@ -63,9 +63,10 @@ def run_probe(settings, token: str, timeout_ms: int = 45_000) -> ProbeResult:
 
     width, height = settings.viewport
     browser = context = None
-    stage = "launch"
+    stage = "playwright_driver"
     try:
         with sync_playwright() as playwright:
+            stage = "chromium_launch"
             browser = playwright.chromium.launch(
                 executable_path=CHROMIUM,
                 headless=True,
