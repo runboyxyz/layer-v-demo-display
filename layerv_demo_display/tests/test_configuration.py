@@ -41,6 +41,10 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("/usr/local/bin/qurl-connector rcx -> connector,", profile)
         self.assertIn("profile connector {", profile)
         child = profile.split("profile connector {", 1)[1]
+        self.assertIn("/proc/{,**} r,", child)
+        self.assertIn("/sys/devices/system/cpu/** r,", child)
+        self.assertIn("network unix stream,", child)
+        self.assertIn("network unix dgram,", child)
         self.assertIn("/data/secrets/layerv-api-key r,", child)
         self.assertNotIn("/app/{,**}", child)
         self.assertNotIn("/data/options.json", child)
