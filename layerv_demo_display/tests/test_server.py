@@ -28,6 +28,7 @@ class ServerTests(unittest.TestCase):
     def test_public_route_accepts_only_display_and_verification_routes(self):
         self.assertEqual(display_parts("/display/token"), ("token", "view"))
         self.assertEqual(display_parts("/display/token/frame"), ("token", "frame"))
+        self.assertEqual(display_parts("/display/token/stream"), ("token", "stream"))
         self.assertEqual(
             display_parts("/display/token/verify/request"),
             ("token", "verify_request"),
@@ -52,6 +53,7 @@ class ServerTests(unittest.TestCase):
     def test_viewer_is_pixels_only_and_refreshes_latest_frame(self):
         page = viewer_html(3).decode()
         self.assertIn("LIVE • READ ONLY", page)
+        self.assertIn("/stream", page)
         self.assertIn("/frame?t=", page)
         self.assertIn("setInterval(refresh,3000)", page)
         self.assertNotIn("homeassistant", page.lower())

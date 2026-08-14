@@ -121,9 +121,9 @@ async def _capture_loop(session, settings, token: str, startup_complete=None) ->
                 )
                 if failures >= 3:
                     raise RuntimeError("Frame capture retry limit reached") from error
-            remaining = settings.capture_interval - (time.monotonic() - started)
-            if remaining > 0:
-                await asyncio.to_thread(session.stop_event.wait, remaining)
+            # Chromium capture takes roughly 350 ms on HA Green. A short pause
+            # produces a shared 2–3 FPS stream without continuously pegging it.
+            await asyncio.to_thread(session.stop_event.wait, 0.1)
     finally:
         if stop_task is not None:
             stop_task.cancel()

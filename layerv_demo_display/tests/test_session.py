@@ -63,6 +63,27 @@ class SessionTests(unittest.TestCase):
         self.clock.now += 11
         self.assertTrue(self.session.allow_frame_request("viewer"))
 
+    def test_stream_waits_for_shared_frame_and_closes_on_revocation(self):
+        token = self.start()
+        self.assertTrue(self.session.open_stream(token, "stream-1"))
+        self.session.publish_frame(b"live", 0.1)
+        sequence, frame = self.session.wait_for_frame(token, "viewer", 0, timeout=0)
+        self.assertEqual(frame, b"live")
+        self.assertGreater(sequence, 0)
+        self.session.end(join_timeout=0)
+        self.assertEqual(
+            self.session.wait_for_frame(token, "viewer", sequence, timeout=0),
+            (sequence, None),
+        )
+
+    def test_stream_viewers_are_bounded(self):
+        token = self.start()
+        for index in range(4):
+            self.assertTrue(self.session.open_stream(token, f"stream-{index}"))
+        self.assertFalse(self.session.open_stream(token, "stream-5"))
+        self.session.close_stream("stream-0")
+        self.assertTrue(self.session.open_stream(token, "stream-5"))
+
 
 if __name__ == "__main__":
     unittest.main()

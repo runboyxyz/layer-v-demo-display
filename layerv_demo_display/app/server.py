@@ -10,6 +10,7 @@ import base64
 import json
 import logging
 import os
+import secrets
 import signal
 import threading
 import time
@@ -42,7 +43,7 @@ TRUSTED_PROXIES = frozenset(
     for item in os.getenv("TRUSTED_INGRESS_PROXIES", "172.30.32.2").split(",")
     if item.strip()
 )
-VIEWER_SCRIPT_TEMPLATE = r"""const image=document.getElementById('frame');const state=document.getElementById('state');const refresh=()=>{const next=new Image();next.onload=()=>{image.src=next.src;state.textContent='LIVE • READ ONLY'};next.onerror=()=>{state.textContent='WAITING FOR DISPLAY…'};next.src=location.pathname.replace(/\/$/,'')+'/frame?t='+Date.now()};refresh();setInterval(refresh,__INTERVAL__);"""
+VIEWER_SCRIPT_TEMPLATE = r"""const image=document.getElementById('frame');const state=document.getElementById('state');const base=location.pathname.replace(/\/$/,'');let fallback=false;const refresh=()=>{const next=new Image();next.onload=()=>{image.src=next.src;state.textContent='LIVE • READ ONLY'};next.onerror=()=>{state.textContent='WAITING FOR DISPLAY…'};next.src=base+'/frame?t='+Date.now()};const polling=()=>{if(fallback)return;fallback=true;refresh();setInterval(refresh,__INTERVAL__)};image.onload=()=>{state.textContent='LIVE • READ ONLY'};image.onerror=polling;image.src=base+'/stream';setTimeout(()=>{if(!image.complete&&image.naturalWidth===0)polling()},5000);"""
 ADMIN_SCRIPT = """document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);button.textContent='Copied'}));"""
 ADMIN_SCRIPT_HASH = base64.b64encode(sha256(ADMIN_SCRIPT.encode()).digest()).decode()
 
@@ -108,6 +109,8 @@ def display_parts(path: str) -> tuple[str, str] | None:
         return parts[2], "view"
     if len(parts) == 4 and parts[:2] == ["", "display"] and parts[2] and parts[3] == "frame":
         return parts[2], "frame"
+    if len(parts) == 4 and parts[:2] == ["", "display"] and parts[2] and parts[3] == "stream":
+        return parts[2], "stream"
     if (
         len(parts) == 5
         and parts[:2] == ["", "display"]
@@ -209,7 +212,7 @@ button,a{{padding:.8rem 1rem;margin-top:14px;border:0;border-radius:8px;font-wei
 <dt>Renderer</dt><dd>{escape(current.state)}</dd><dt>Chromium</dt><dd>{'Running' if active else 'Not running'}</dd>
 <dt>LayerV</dt><dd>{publication}</dd><dt>Viewer access</dt><dd>{'Email code required' if VERIFICATION.required else 'Link only'}</dd>
 <dt>Dashboard</dt><dd>{escape(settings.dashboard_path)}</dd><dt>Resolution</dt><dd>{width} × {height}</dd>
-<dt>Refresh</dt><dd>{settings.capture_interval} seconds</dd><dt>Expires</dt><dd>{escape(expires)}</dd>
+<dt>Refresh</dt><dd>Live stream (1-second fallback)</dd><dt>Expires</dt><dd>{escape(expires)}</dd>
 <dt>Last frame</dt><dd>{escape(_age(current.last_frame_at))}</dd><dt>Capture time</dt><dd>{f'{current.frame_duration:.2f} seconds' if current.frame_duration is not None else '—'}</dd>
 <dt>Viewers</dt><dd>{current.viewers}</dd><dt>Failures</dt><dd>{current.consecutive_failures}</dd></dl>{actions}
 <div class="notice">The Demo Display sends rendered images of the selected dashboard to anyone possessing the active Demo Session link. End the session when the demonstration is complete.</div>
@@ -304,6 +307,9 @@ class Handler(BaseHTTPRequestHandler):
             )
             return True
         viewer = self.client_address[0]
+        if action == "stream":
+            self._stream(token, viewer)
+            return True
         if not SESSION.allow_frame_request(viewer):
             self._send(429, b"Too many requests.\n", "text/plain; charset=utf-8", True)
             return True
@@ -313,6 +319,36 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(200, image, "image/jpeg", True)
         return True
+
+    def _stream(self, token: str, viewer: str) -> None:
+        stream_id = secrets.token_urlsafe(12)
+        if not SESSION.open_stream(token, stream_id):
+            self._send(429, b"Too many live viewers.\n", "text/plain; charset=utf-8", True)
+            return
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            for name, value in COMMON_HEADERS.items():
+                self.send_header(name, value)
+            self.send_header("Content-Security-Policy", VIEWER_CSP)
+            self.end_headers()
+            sequence = -1
+            while SESSION.valid_token(token):
+                sequence, image = SESSION.wait_for_frame(token, viewer, sequence)
+                if image is None:
+                    continue
+                self.wfile.write(
+                    b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                    + str(len(image)).encode()
+                    + b"\r\n\r\n"
+                    + image
+                    + b"\r\n"
+                )
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            pass
+        finally:
+            SESSION.close_stream(stream_id)
 
     def do_GET(self):
         self._sync_session()

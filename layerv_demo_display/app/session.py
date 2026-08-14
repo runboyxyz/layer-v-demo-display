@@ -29,6 +29,7 @@ class DemoSession:
     def __init__(self, clock: Callable[[], float] = time.time):
         self._clock = clock
         self._lock = threading.RLock()
+        self._frame_ready = threading.Condition(self._lock)
         self._token: str | None = None
         self._expires_at: float | None = None
         self._state = "inactive"
@@ -38,6 +39,8 @@ class DemoSession:
         self._failures = 0
         self._viewers: dict[str, float] = {}
         self._requests: dict[str, deque[float]] = defaultdict(deque)
+        self._streams: set[str] = set()
+        self._frame_sequence = 0
         self.stop_event = threading.Event()
         self.worker: threading.Thread | None = None
 
@@ -56,6 +59,8 @@ class DemoSession:
             self._failures = 0
             self._viewers.clear()
             self._requests.clear()
+            self._streams.clear()
+            self._frame_sequence = 0
             self.stop_event = threading.Event()
             self.worker = threading.Thread(
                 target=worker_target, args=(token,), name="demo-renderer", daemon=True
@@ -84,6 +89,8 @@ class DemoSession:
             self._frame_duration = duration
             self._failures = 0
             self._state = "running"
+            self._frame_sequence += 1
+            self._frame_ready.notify_all()
 
     def renderer_failure(self) -> int:
         with self._lock:
@@ -120,6 +127,38 @@ class DemoSession:
             requests.append(now)
             return True
 
+    def open_stream(self, token: str, stream_id: str, limit: int = 4) -> bool:
+        with self._lock:
+            self._expire_locked()
+            if (
+                self._token is None
+                or not secrets.compare_digest(self._token, token)
+                or len(self._streams) >= limit
+            ):
+                return False
+            self._streams.add(stream_id)
+            return True
+
+    def close_stream(self, stream_id: str) -> None:
+        with self._lock:
+            self._streams.discard(stream_id)
+
+    def wait_for_frame(
+        self, token: str, viewer: str, after_sequence: int, timeout: float = 5.0
+    ) -> tuple[int, bytes | None]:
+        with self._frame_ready:
+            deadline = time.monotonic() + timeout
+            while self._frame_sequence <= after_sequence:
+                self._expire_locked()
+                if self._token is None or not secrets.compare_digest(self._token, token):
+                    return self._frame_sequence, None
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return self._frame_sequence, None
+                self._frame_ready.wait(remaining)
+            self._viewers[viewer] = self._clock()
+            return self._frame_sequence, self._frame
+
     def snapshot(self) -> SessionSnapshot:
         with self._lock:
             self._expire_locked()
@@ -155,4 +194,6 @@ class DemoSession:
         self._frame_duration = None
         self._viewers.clear()
         self._requests.clear()
+        self._streams.clear()
         self._state = state
+        self._frame_ready.notify_all()
