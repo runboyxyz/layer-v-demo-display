@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 
 OPTIONS_FILE = Path(os.getenv("APP_OPTIONS_FILE", "/data/options.json"))
 RESOLUTIONS = {"1280x720": (1280, 720), "1920x1080": (1920, 1080)}
+VIDEO_RESOLUTIONS = {"960x540": (960, 540), "1280x720": (1280, 720)}
 DURATIONS = {15, 30, 60, 120}
 
 
@@ -22,6 +23,7 @@ class Settings:
     dashboard_path: str = "/demo-home/home"
     resolution: str = "1920x1080"
     renderer_mode: str = "jpeg"
+    video_resolution: str = "960x540"
     renderer_target_fps: int = 5
     capture_interval: int = 1
     default_session_duration: int = 60
@@ -31,6 +33,10 @@ class Settings:
     @property
     def viewport(self) -> tuple[int, int]:
         return RESOLUTIONS[self.resolution]
+
+    @property
+    def video_viewport(self) -> tuple[int, int]:
+        return VIDEO_RESOLUTIONS[self.video_resolution]
 
 
 def validate_dashboard_path(value: object) -> str:
@@ -72,6 +78,9 @@ def parse_settings(value: object) -> Settings:
     renderer_mode = value.get("renderer_mode", "jpeg")
     if renderer_mode not in {"jpeg", "video"}:
         raise ConfigurationError("Renderer mode must be jpeg or video")
+    video_resolution = value.get("video_resolution", "960x540")
+    if video_resolution not in VIDEO_RESOLUTIONS:
+        raise ConfigurationError("Video resolution must be 960x540 or 1280x720")
     renderer_target_fps = value.get("renderer_target_fps", 5)
     if isinstance(renderer_target_fps, str) and renderer_target_fps.isdigit():
         renderer_target_fps = int(renderer_target_fps)
@@ -87,6 +96,7 @@ def parse_settings(value: object) -> Settings:
         dashboard_path=validate_dashboard_path(value.get("dashboard_path", "/demo-home/home")),
         resolution=resolution,
         renderer_mode=renderer_mode,
+        video_resolution=video_resolution,
         renderer_target_fps=renderer_target_fps,
         capture_interval=interval,
         default_session_duration=duration,

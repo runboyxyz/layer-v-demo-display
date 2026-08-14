@@ -96,7 +96,7 @@ async def _jpeg_loop(page, session, settings) -> None:
 
 async def _video_loop(context, page, session, settings) -> None:
     """Encode newest-frame-only CDP JPEGs into a shared low-latency fMP4 stream."""
-    width, height = settings.viewport
+    width, height = settings.video_viewport
     process = await asyncio.create_subprocess_exec(
         *ffmpeg_command(width, height, settings.renderer_target_fps),
         stdin=asyncio.subprocess.PIPE,

@@ -88,13 +88,14 @@ configuration, routes, data, credentials, images, or containers.
 
 - `dashboard_path`: a relative local HA path such as `/demo-home/home`.
 - `resolution`: `1280x720` or `1920x1080`.
+- `video_resolution`: `960x540` (lower CPU, recommended) or `1280x720` (sharper).
 - `capture_interval`: JPEG polling fallback interval, 1–10 seconds; default 1. The normal live stream captures shared frames at roughly 2–3 FPS.
 
 Each active Demo Session can have up to 20 independent viewer invitations. Entering an email sends that viewer the activation and display links even when email-code verification is not selected. Each invitation has its own qURL, display token, optional verification state, and revoke control; ending the Demo Session revokes all invitations and stops Chromium.
 
 ## Experimental video renderer
 
-`renderer_mode: video` enables an opt-in software H.264 experiment over the same token-protected LayerV HTTP tunnel. Chromium CDP supplies JPEG source frames to a fixed FFmpeg process, which emits fragmented MP4 held only in bounded memory. The viewer receives encoded pixels only and falls back to MJPEG and then JPEG polling if video playback fails. Start with `resolution: 1280x720` and `renderer_target_fps: 5`; JPEG remains the default mode. No hardware device, host privilege, HA credential, interactive input, or persistent media file is exposed.
+`renderer_mode: video` enables an opt-in software H.264 experiment over the same token-protected LayerV HTTP tunnel. Chromium CDP supplies JPEG source frames to a fixed FFmpeg process, which emits fragmented MP4 held only in bounded memory. The viewer receives encoded pixels only and falls back to MJPEG and then JPEG polling if video playback fails. Start with `video_resolution: 960x540` and `renderer_target_fps: 5`; JPEG remains the default mode. The dashboard viewport remains controlled separately by `resolution`. No hardware device, host privilege, HA credential, interactive input, or persistent media file is exposed.
 - `default_session_duration`: 15, 30, 60, or 120 minutes; default 60.
 - `hide_ha_sidebar` and `hide_ha_header`: accepted settings; chrome hiding is
   not yet implemented.

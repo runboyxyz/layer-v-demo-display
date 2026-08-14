@@ -50,6 +50,7 @@ class ServerTests(unittest.TestCase):
         payload = status_payload(Settings())
         self.assertFalse(payload["chromium_running"])
         self.assertEqual(payload["renderer"], "stopped")
+        self.assertEqual(payload["video_output"], {"width": 960, "height": 540})
 
     def test_status_page_has_session_start_but_no_token_when_inactive(self):
         page = status_html(Settings(), "test").decode()
