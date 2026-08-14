@@ -38,7 +38,12 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_connector_apparmor_rule_allows_its_executable_mapping(self):
         profile = (Path(__file__).parents[1] / "apparmor.txt").read_text()
-        self.assertIn("/usr/local/bin/qurl-connector mrix,", profile)
+        self.assertIn("/usr/local/bin/qurl-connector rcx -> connector,", profile)
+        self.assertIn("profile connector {", profile)
+        child = profile.split("profile connector {", 1)[1]
+        self.assertIn("/data/secrets/layerv-api-key r,", child)
+        self.assertNotIn("/app/{,**}", child)
+        self.assertNotIn("/data/options.json", child)
 
 
 if __name__ == "__main__":
