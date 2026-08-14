@@ -52,8 +52,10 @@ def ffmpeg_command(width: int, height: int, fps: int) -> list[str]:
         "/usr/bin/ffmpeg", "-hide_banner", "-loglevel", "warning",
         "-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", str(fps), "-i", "pipe:0",
         "-an", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-        "-pix_fmt", "yuv420p", "-vf", f"scale={width}:{height}",
+        "-profile:v", "baseline", "-bf", "0", "-refs", "1",
+        "-pix_fmt", "yuv420p", "-vf", f"scale={width}:{height}:in_range=pc:out_range=tv",
         "-g", str(keyframe_interval), "-keyint_min", str(keyframe_interval), "-sc_threshold", "0",
         "-movflags", "frag_keyframe+empty_moov+default_base_moof",
+        "-flush_packets", "1",
         "-f", "mp4", "pipe:1",
     ]

@@ -22,6 +22,9 @@ class VideoTests(unittest.TestCase):
         self.assertIn("libx264", command)
         self.assertIn("zerolatency", command)
         self.assertIn("frag_keyframe+empty_moov+default_base_moof", command)
+        self.assertIn("scale=1280:720:in_range=pc:out_range=tv", command)
+        self.assertIn("baseline", command)
+        self.assertIn("-flush_packets", command)
         self.assertNotIn("-hwaccel", command)
 
 

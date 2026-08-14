@@ -56,7 +56,7 @@ TRUSTED_PROXIES = frozenset(
     for item in os.getenv("TRUSTED_INGRESS_PROXIES", "172.30.32.2").split(",")
     if item.strip()
 )
-VIEWER_SCRIPT_TEMPLATE = r"""const image=document.getElementById('frame');const video=document.getElementById('video');const state=document.getElementById('state');const base=location.pathname.replace(/\/$/,'');let fallback=false;const refresh=()=>{const next=new Image();next.onload=()=>{image.src=next.src;state.textContent='LIVE • READ ONLY'};next.onerror=()=>{state.textContent='WAITING FOR DISPLAY…'};next.src=base+'/frame?t='+Date.now()};const polling=()=>{if(fallback)return;fallback=true;video.pause();video.hidden=true;image.hidden=false;image.onerror=()=>{refresh();setInterval(refresh,__INTERVAL__)};image.src=base+'/stream'};if(__VIDEO__){video.hidden=false;image.hidden=true;video.onplaying=()=>{state.textContent='LIVE • READ ONLY'};video.onerror=polling;video.src=base+'/video';video.play().catch(polling);setTimeout(()=>{if(video.readyState===0)polling()},5000)}else polling();"""
+VIEWER_SCRIPT_TEMPLATE = r"""const image=document.getElementById('frame');const video=document.getElementById('video');const state=document.getElementById('state');const base=location.pathname.replace(/\/$/,'');let fallback=false;const refresh=()=>{const next=new Image();next.onload=()=>{image.src=next.src;state.textContent='LIVE • READ ONLY'};next.onerror=()=>{state.textContent='WAITING FOR DISPLAY…'};next.src=base+'/frame?t='+Date.now()};const polling=()=>{if(fallback)return;fallback=true;video.pause();video.hidden=true;image.hidden=false;image.onerror=()=>{refresh();setInterval(refresh,__INTERVAL__)};image.src=base+'/stream'};const liveEdge=()=>{if(video.buffered.length){const end=video.buffered.end(video.buffered.length-1);if(end-video.currentTime>.65)video.currentTime=Math.max(0,end-.15)}};if(__VIDEO__){video.hidden=false;image.hidden=true;video.onplaying=()=>{state.textContent='LIVE • READ ONLY'};video.onprogress=liveEdge;video.ontimeupdate=liveEdge;video.onerror=polling;video.src=base+'/video';video.play().catch(polling);setTimeout(()=>{if(video.readyState===0)polling()},12000)}else polling();"""
 ADMIN_SCRIPT = """document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);button.textContent='Copied'}));"""
 ADMIN_SCRIPT_HASH = base64.b64encode(sha256(ADMIN_SCRIPT.encode()).digest()).decode()
 
@@ -384,6 +384,7 @@ class Handler(BaseHTTPRequestHandler):
         if not SESSION.open_stream(token, stream_id):
             self._send(429, b"Too many live viewers.\n", "text/plain; charset=utf-8", True)
             return
+        LOGGER.info("Experimental video viewer connected")
         try:
             self.send_response(200)
             self.send_header("Content-Type", "video/mp4")

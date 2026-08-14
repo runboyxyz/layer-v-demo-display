@@ -132,6 +132,12 @@ async def _video_loop(context, page, session, settings) -> None:
     cdp.on("Page.screencastFrame", on_frame)
     reader = asyncio.create_task(read_output())
     diagnostics = asyncio.create_task(drain_errors())
+    # A static dashboard may not trigger an immediate CDP screencast event.
+    # Seed FFmpeg so it can emit the MP4 initialization segment promptly.
+    initial_frame = await page.screenshot(
+        type="jpeg", quality=60, full_page=False, timeout=20_000
+    )
+    frames.put_nowait(initial_frame)
     await cdp.send("Page.startScreencast", {
         "format": "jpeg", "quality": 60, "maxWidth": width, "maxHeight": height,
         "everyNthFrame": 1,

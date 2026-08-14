@@ -65,6 +65,7 @@ class ServerTests(unittest.TestCase):
         self.assertIn("LIVE • READ ONLY", page)
         self.assertIn("/stream", page)
         self.assertIn("/frame?t=", page)
+        self.assertIn("video.buffered.end", page)
         self.assertIn("setInterval(refresh,3000)", page)
         self.assertNotIn("homeassistant", page.lower())
         self.assertNotIn("iframe", page.lower())
