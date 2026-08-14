@@ -13,7 +13,8 @@ Version 0.3.0 adds one temporary Demo Session. The Ingress administrator starts
 and ends it explicitly. A dedicated non-root renderer launches Debian ARM64
 Chromium, authenticates through Home Assistant's external-authentication bridge
 using the App-scoped system token, restricts browser traffic to the fixed
-`homeassistant:80` origin, and maintains one current in-memory JPEG.
+`homeassistant:80` HTTP/WebSocket origin pair, waits for the visible Lovelace
+root, and maintains one current in-memory JPEG.
 
 This remains an experiment. It deliberately uses
 Chromium's `--no-sandbox` mode because HA OS container namespaces must first be

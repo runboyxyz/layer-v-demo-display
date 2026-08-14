@@ -24,15 +24,24 @@ class ProbeResult:
 
 
 def allowed_request(url: str, origin: str = HA_ORIGIN) -> bool:
-    """Allow HA-origin traffic and browser-local data/blob resources only."""
+    """Allow HA-origin HTTP/WebSocket traffic and browser-local resources."""
     parsed = urlsplit(url)
     if parsed.scheme in {"data", "blob"}:
         return True
     expected = urlsplit(origin)
-    return (parsed.scheme, parsed.hostname, parsed.port) == (
-        expected.scheme,
-        expected.hostname,
-        expected.port,
+    scheme_pairs = {"http": {"http", "ws"}, "https": {"https", "wss"}}
+
+    def effective_port(value):
+        if value.port is not None:
+            return value.port
+        return 443 if value.scheme in {"https", "wss"} else 80
+
+    return (
+        parsed.username is None
+        and parsed.password is None
+        and parsed.scheme in scheme_pairs.get(expected.scheme, set())
+        and parsed.hostname == expected.hostname
+        and effective_port(parsed) == effective_port(expected)
     )
 
 
@@ -117,6 +126,7 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
             await page.goto(target, wait_until="commit", timeout=timeout_ms)
             stage = "frontend"
             await page.wait_for_selector("home-assistant", state="attached", timeout=timeout_ms)
+            await page.wait_for_selector("hui-root", state="visible", timeout=timeout_ms)
             await page.wait_for_timeout(2_000)
             if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
                 return ProbeResult("failed", "Home Assistant did not accept the App identity")

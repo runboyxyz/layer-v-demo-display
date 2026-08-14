@@ -65,6 +65,7 @@ async def _capture_loop(session, settings, token: str) -> None:
             target = f"{HA_ORIGIN}{settings.dashboard_path}?external_auth=1"
             await page.goto(target, wait_until="commit", timeout=45_000)
             await page.wait_for_selector("home-assistant", state="attached", timeout=45_000)
+            await page.wait_for_selector("hui-root", state="visible", timeout=45_000)
             await page.wait_for_timeout(2_000)
             if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
                 raise RuntimeError("Home Assistant rejected the App identity")

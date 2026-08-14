@@ -13,8 +13,15 @@ class RendererProbeTests(unittest.TestCase):
     def test_navigation_is_restricted_to_home_assistant_origin(self):
         origin = "http://homeassistant"
         self.assertTrue(allowed_request(origin + "/demo-home/home", origin))
+        self.assertTrue(allowed_request("ws://homeassistant/api/websocket", origin))
         self.assertTrue(allowed_request("blob:http://homeassistant/id", origin))
-        for url in ("https://evil.example/", "file:///etc/passwd", "javascript:alert(1)"):
+        for url in (
+            "https://evil.example/",
+            "wss://evil.example/api/websocket",
+            "http://user@homeassistant/",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+        ):
             with self.subTest(url=url):
                 self.assertFalse(allowed_request(url, origin))
 
