@@ -49,7 +49,8 @@ connector process receives neither `SUPERVISOR_TOKEN` nor SMTP credentials;
 the HTTP process cannot read the LayerV API key, connector identity, or private
 key state. Both remain confined by the AppArmor allowlist.
 
-The renderer captures independently at the configured interval. Viewer
+The renderer captures independently at the configured interval (one second by
+default). Viewer
 requests return only the latest existing JPEG and never cause navigation or a
 new screenshot. End, expiry, renderer failure, App shutdown, and SIGTERM all
 invalidate the token, erase the frame, signal the renderer, and close Chromium.

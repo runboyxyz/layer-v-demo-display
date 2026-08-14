@@ -10,7 +10,7 @@ class ConfigurationTests(unittest.TestCase):
     def test_defaults_are_valid(self):
         settings = parse_settings({})
         self.assertEqual(settings.viewport, (1920, 1080))
-        self.assertEqual(settings.capture_interval, 2)
+        self.assertEqual(settings.capture_interval, 1)
 
     @patch.dict("os.environ", {"APP_SETTINGS_JSON": json.dumps({"capture_interval": 4})})
     def test_validated_runtime_settings_avoid_supervisor_owned_file(self):

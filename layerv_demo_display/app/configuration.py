@@ -21,7 +21,7 @@ class ConfigurationError(ValueError):
 class Settings:
     dashboard_path: str = "/demo-home/home"
     resolution: str = "1920x1080"
-    capture_interval: int = 2
+    capture_interval: int = 1
     default_session_duration: int = 60
     hide_ha_sidebar: bool = True
     hide_ha_header: bool = True
@@ -67,7 +67,7 @@ def parse_settings(value: object) -> Settings:
     resolution = value.get("resolution", "1920x1080")
     if resolution not in RESOLUTIONS:
         raise ConfigurationError("Resolution must be 1280x720 or 1920x1080")
-    interval = value.get("capture_interval", 2)
+    interval = value.get("capture_interval", 1)
     if isinstance(interval, bool) or not isinstance(interval, int) or not 1 <= interval <= 10:
         raise ConfigurationError("Capture interval must be from 1 to 10 seconds")
     duration = value.get("default_session_duration", 60)
