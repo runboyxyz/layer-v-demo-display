@@ -6,6 +6,9 @@ ARG BUILD_VERSION=0.2.0
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app \
+    HOME=/tmp/demo-display \
+    XDG_CACHE_HOME=/tmp/demo-display/cache \
+    XDG_CONFIG_HOME=/tmp/demo-display/config \
     APP_VERSION=${BUILD_VERSION}
 
 LABEL \
