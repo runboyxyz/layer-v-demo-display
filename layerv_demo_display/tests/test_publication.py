@@ -85,7 +85,8 @@ class PublicationTests(unittest.TestCase):
             publisher, "_request", return_value=response
         ):
             result = publisher.publish("display-secret", 30)
-        self.assertEqual(result, "https://demo.qurl.site/display/display-secret")
+        self.assertEqual(result["remote_url"], "https://demo.qurl.site/display/display-secret")
+        self.assertTrue(result["id"])
         self.assertEqual(publisher.activation_url, "https://activate.example/q_one")
         self.assertNotIn("homeassistant", result)
 
@@ -94,6 +95,23 @@ class PublicationTests(unittest.TestCase):
         secret_directory.chmod(0o755)
         publication.secure_storage_modes()
         self.assertEqual(secret_directory.stat().st_mode & 0o777, 0o700)
+
+    def test_publications_are_revoked_independently(self):
+        publication.SECRET_FILE.write_text("synthetic-key")
+        publication.CONNECTOR_CONFIG.write_text("resource_id: r_demo\n")
+        publisher = publication.LayerVPublisher()
+        responses = [
+            {"data": {"qurl_site": "https://one.qurl.site", "qurl_link": "https://activate.example/one", "qurl_id": "q_one"}},
+            {"data": {"qurl_site": "https://two.qurl.site", "qurl_link": "https://activate.example/two", "qurl_id": "q_two"}},
+        ]
+        with patch.object(publisher, "start_connector"), patch.object(
+            publisher, "_request", side_effect=responses + [{}]
+        ) as request:
+            first = publisher.publish("token-one", 30)
+            second = publisher.publish("token-two", 30)
+            publisher.revoke(first["id"])
+        self.assertEqual([item["id"] for item in publisher.publications], [second["id"]])
+        self.assertIn("q_one", request.call_args.args[1])
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ class Handler(socketserver.StreamRequestHandler):
                     "connected": PUBLISHER.connected,
                     "remote_url": PUBLISHER.remote_url,
                     "activation_url": PUBLISHER.activation_url,
+                    "publications": PUBLISHER.publications,
                 }
             elif operation == "connect":
                 PUBLISHER.connect(str(request.get("api_key") or ""))
@@ -42,7 +43,7 @@ class Handler(socketserver.StreamRequestHandler):
                     raise PublicationError("Invalid publication lifetime")
                 value = PUBLISHER.publish(token, lifetime)
             elif operation == "revoke":
-                PUBLISHER.revoke()
+                PUBLISHER.revoke(str(request.get("publication_id") or ""))
                 value = None
             else:
                 raise PublicationError("Unknown publisher request")

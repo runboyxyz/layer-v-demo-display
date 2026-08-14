@@ -15,7 +15,10 @@ from app.server import (
     viewer_html,
     viewer_csp,
     verification_html,
+    Invitation,
+    INVITATIONS,
 )
+from app.verification import VerificationGate
 
 
 class ServerTests(unittest.TestCase):
@@ -87,11 +90,20 @@ class ServerTests(unittest.TestCase):
             snapshot.return_value.consecutive_failures = 0
             publisher.configured = True
             publisher.connected = True
-            publisher.activation_url = "https://activate.example/q_demo"
-            publisher.remote_url = "https://demo.qurl.site/display/synthetic-token"
-            page = status_html(Settings(), "test").decode()
+            gate = VerificationGate()
+            gate.begin("")
+            INVITATIONS["synthetic-token"] = Invitation(
+                "invite-one", "synthetic-token", "viewer@example.com", gate,
+                "publication-one", "https://activate.example/q_demo",
+                "https://demo.qurl.site/display/synthetic-token",
+            )
+            try:
+                page = status_html(Settings(), "test").decode()
+            finally:
+                INVITATIONS.clear()
         self.assertIn("Open Demo Display", page)
-        self.assertIn("End Session &amp; Revoke qURL", page)
+        self.assertIn("Revoke this viewer", page)
+        self.assertIn("End Demo Session &amp; Revoke All", page)
 
     def test_admin_notice_is_one_time_and_bounded(self):
         set_admin_notice("x" * 600)

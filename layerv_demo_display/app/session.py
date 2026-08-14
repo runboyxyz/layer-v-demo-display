@@ -31,6 +31,7 @@ class DemoSession:
         self._lock = threading.RLock()
         self._frame_ready = threading.Condition(self._lock)
         self._token: str | None = None
+        self._viewer_tokens: set[str] = set()
         self._expires_at: float | None = None
         self._state = "inactive"
         self._frame: bytes | None = None
@@ -51,6 +52,7 @@ class DemoSession:
                 raise RuntimeError("A Demo Session is already active")
             token = secrets.token_urlsafe(32)
             self._token = token
+            self._viewer_tokens = {token}
             self._expires_at = self._clock() + duration_minutes * 60
             self._state = "starting"
             self._frame = None
@@ -106,12 +108,38 @@ class DemoSession:
     def valid_token(self, token: str) -> bool:
         with self._lock:
             self._expire_locked()
-            return self._token is not None and secrets.compare_digest(self._token, token)
+            return self._valid_token_locked(token)
+
+    def issue_viewer_token(self) -> str:
+        with self._lock:
+            self._expire_locked()
+            if self._token is None:
+                raise RuntimeError("A Demo Session is not active")
+            token = secrets.token_urlsafe(32)
+            self._viewer_tokens.add(token)
+            return token
+
+    def revoke_viewer_token(self, token: str) -> bool:
+        with self._lock:
+            matched = next(
+                (value for value in self._viewer_tokens if secrets.compare_digest(value, token)),
+                None,
+            )
+            if matched is None:
+                return False
+            self._viewer_tokens.remove(matched)
+            self._frame_ready.notify_all()
+            return True
+
+    def _valid_token_locked(self, token: str) -> bool:
+        return self._token is not None and any(
+            secrets.compare_digest(value, token) for value in self._viewer_tokens
+        )
 
     def frame_for(self, token: str, viewer: str) -> bytes | None:
         with self._lock:
             self._expire_locked()
-            if self._token is None or not secrets.compare_digest(self._token, token):
+            if not self._valid_token_locked(token):
                 return None
             self._viewers[viewer] = self._clock()
             return self._frame
@@ -132,7 +160,7 @@ class DemoSession:
             self._expire_locked()
             if (
                 self._token is None
-                or not secrets.compare_digest(self._token, token)
+                or not self._valid_token_locked(token)
                 or len(self._streams) >= limit
             ):
                 return False
@@ -150,7 +178,7 @@ class DemoSession:
             deadline = time.monotonic() + timeout
             while self._frame_sequence <= after_sequence:
                 self._expire_locked()
-                if self._token is None or not secrets.compare_digest(self._token, token):
+                if not self._valid_token_locked(token):
                     return self._frame_sequence, None
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -188,6 +216,7 @@ class DemoSession:
     def _invalidate_locked(self, state: str) -> None:
         self.stop_event.set()
         self._token = None
+        self._viewer_tokens.clear()
         self._expires_at = None
         self._frame = None
         self._last_frame_at = None

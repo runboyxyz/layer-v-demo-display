@@ -79,6 +79,20 @@ class VerificationTests(unittest.TestCase):
                 "https://demo.qurl.site/display/synthetic-token",
             )
 
+    @patch("app.verification.smtplib.SMTP")
+    def test_email_without_verification_sends_links_without_code_claim(self, smtp):
+        self.smtp_file.write_text('{"host":"smtp.example","port":25,"from":"demo@example.com"}')
+        gate = verification.VerificationGate(clock=lambda: 1000)
+        gate.begin("viewer@example.com", required=False)
+        self.assertFalse(gate.required)
+        gate.send_invitation(
+            "https://activate.example/q_demo",
+            "https://demo.qurl.site/display/synthetic-token",
+        )
+        message = smtp.return_value.__enter__.return_value.send_message.call_args.args[0]
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        self.assertIn("No verification code is required", plain)
+
 
 if __name__ == "__main__":
     unittest.main()

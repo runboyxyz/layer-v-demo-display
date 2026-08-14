@@ -7,6 +7,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import secrets
 import subprocess  # nosec B404 - fixed executable and arguments only
 import threading
 from urllib.error import HTTPError, URLError
@@ -53,15 +54,13 @@ def _atomic_write(path: Path, value: str, mode: int = 0o600) -> None:
 
 
 class LayerVPublisher:
-    """Own the Demo Display connector and at most one temporary qURL."""
+    """Own the connector and independently revocable temporary qURLs."""
 
     def __init__(self):
         self._lock = threading.RLock()
         self._connector: subprocess.Popen | None = None
         self._resource_id = self._read_resource_id()
-        self._remote_url = ""
-        self._activation_url = ""
-        self._qurl_id = ""
+        self._publications: dict[str, dict[str, str]] = {}
 
     @property
     def configured(self) -> bool:
@@ -70,12 +69,17 @@ class LayerVPublisher:
     @property
     def remote_url(self) -> str:
         with self._lock:
-            return self._remote_url
+            return next(iter(self._publications.values()), {}).get("remote_url", "")
 
     @property
     def activation_url(self) -> str:
         with self._lock:
-            return self._activation_url
+            return next(iter(self._publications.values()), {}).get("activation_url", "")
+
+    @property
+    def publications(self) -> list[dict[str, str]]:
+        with self._lock:
+            return [dict(value) for value in self._publications.values()]
 
     @property
     def connected(self) -> bool:
@@ -218,7 +222,7 @@ class LayerVPublisher:
                     LOGGER.info("Connector diagnostic: %s", diagnostic)
         LOGGER.warning("Connector stopped: exit_code=%s", connector.wait())
 
-    def publish(self, display_token: str, lifetime_minutes: int) -> str:
+    def publish(self, display_token: str, lifetime_minutes: int) -> dict[str, str]:
         if not self.configured:
             raise PublicationError("Connect LayerV before publishing the display")
         self.start_connector()
@@ -236,26 +240,35 @@ class LayerVPublisher:
         if not site or not activation or not qurl_id:
             raise PublicationError("LayerV returned an incomplete qURL")
         with self._lock:
-            self._qurl_id = qurl_id
-            self._activation_url = activation
-            self._remote_url = f"{site}/display/{display_token}"
-            return self._remote_url
+            publication_id = secrets.token_urlsafe(12)
+            value = {
+                "id": publication_id,
+                "qurl_id": qurl_id,
+                "activation_url": activation,
+                "remote_url": f"{site}/display/{display_token}",
+            }
+            self._publications[publication_id] = value
+            return dict(value)
 
-    def revoke(self) -> None:
+    def revoke(self, publication_id: str = "") -> None:
         with self._lock:
-            qurl_id = self._qurl_id
-            self._qurl_id = ""
-            self._remote_url = ""
-            self._activation_url = ""
-        if not qurl_id or not self._resource_id or not SECRET_FILE.is_file():
+            if publication_id:
+                values = [self._publications.pop(publication_id, {})]
+            else:
+                values = list(self._publications.values())
+                self._publications.clear()
+        if not self._resource_id or not SECRET_FILE.is_file():
             return
-        try:
-            self._request(
-                "DELETE",
-                f"/v1/resources/{quote(self._resource_id, safe='')}/qurls/{quote(qurl_id, safe='')}",
-            )
-        except PublicationError:
-            return
+        for value in values:
+            qurl_id = value.get("qurl_id", "")
+            if qurl_id:
+                try:
+                    self._request(
+                        "DELETE",
+                        f"/v1/resources/{quote(self._resource_id, safe='')}/qurls/{quote(qurl_id, safe='')}",
+                    )
+                except PublicationError:
+                    continue
 
     def _request(self, method: str, path: str, body: bytes | None = None) -> dict:
         try:

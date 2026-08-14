@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
 from html import escape
@@ -35,7 +36,19 @@ PORT = int(os.getenv("INGRESS_PORT", "8099"))
 SETTINGS = Settings()
 SESSION = DemoSession()
 PUBLISHER: LayerVPublisher | None = None
-VERIFICATION = VerificationGate()
+@dataclass
+class Invitation:
+    id: str
+    token: str
+    email: str
+    verification: VerificationGate
+    publication_id: str
+    activation_url: str
+    remote_url: str
+
+
+INVITATIONS: dict[str, Invitation] = {}
+INVITATIONS_LOCK = threading.RLock()
 ADMIN_NOTICE = ""
 ADMIN_NOTICE_LOCK = threading.Lock()
 TRUSTED_PROXIES = frozenset(
@@ -102,6 +115,22 @@ def take_admin_notice() -> str:
         return value
 
 
+def invitation_for(token: str) -> Invitation | None:
+    with INVITATIONS_LOCK:
+        return next(
+            (item for key, item in INVITATIONS.items() if secrets.compare_digest(key, token)),
+            None,
+        )
+
+
+def clear_invitations() -> None:
+    with INVITATIONS_LOCK:
+        values = list(INVITATIONS.values())
+        INVITATIONS.clear()
+    for item in values:
+        item.verification.end()
+
+
 def display_parts(path: str) -> tuple[str, str] | None:
     """Return (token, action) for an exact public display route."""
     parts = path.split("/")
@@ -156,34 +185,32 @@ def status_html(settings: Settings, version: str, message: str = "") -> bytes:
         if current.expires_at
         else "—"
     )
-    display_path = f"/display/{escape(current.token)}" if current.token else "—"
     publisher = PUBLISHER
-    remote_url = publisher.remote_url if publisher else ""
-    activation_url = publisher.activation_url if publisher else ""
     publication = (
         "Connected" if publisher and publisher.connected else
         "Configured" if publisher and publisher.configured else "Not connected"
     )
-    activation = (
-        '<p><label>1. Activate LayerV access</label>'
-        f'<code id="activation-path">{escape(activation_url)}</code></p>'
-        '<p><a href="' + escape(activation_url) + '" target="_blank" rel="noopener noreferrer">'
-        'Open Activation qURL</a> '
-        '<button data-copy="activation-path" type="button">Copy Activation qURL</button></p>'
-        if activation_url else ""
+    with INVITATIONS_LOCK:
+        invitations = list(INVITATIONS.values())
+    invitation_cards = "".join(
+        f'<section class="secondary"><h3>{escape(item.email or "Link-only viewer")}</h3>'
+        f'<p>{"Email code required" if item.verification.required else "Link only"}</p>'
+        f'<p><a href="{escape(item.activation_url)}" target="_blank" rel="noopener noreferrer">Open Activation qURL</a> '
+        f'<a href="{escape(item.remote_url)}" target="_blank" rel="noopener noreferrer">Open Demo Display</a></p>'
+        f'<form method="post" action="api/invitations/revoke"><input type="hidden" name="invitation_id" value="{escape(item.id)}"><button class="danger" type="submit">Revoke this viewer</button></form></section>'
+        for item in invitations
     )
     actions = (
-        activation
-        + f"<p><label>{'2. Open Demo Display' if remote_url else 'Local display path'}</label>"
-        f"<code id=\"display-path\">{escape(remote_url or display_path)}</code></p>"
-        + (f'<p><a href="{escape(remote_url)}" target="_blank" rel="noopener noreferrer">Open Demo Display</a> ' if remote_url else '<p>')
-        + '<button data-copy="display-path" type="button">Copy Display Link</button></p>'
-        + '<p>The activation qURL and display link are created by LayerV for this session. Copy either link above to resend it. Ending the session invalidates the display token and revokes its qURL; starting another session creates new links.</p>'
-        + '<form method="post" action="api/session/end"><button class="danger" type="submit">End Session &amp; Revoke qURL</button></form>'
+        invitation_cards
+        + '<section class="secondary"><h3>Invite another viewer</h3><form method="post" action="api/invitations/create">'
+        '<label>Viewer email (optional)</label><input name="verification_email" type="email" autocomplete="off">'
+        '<label class="check"><input type="checkbox" name="email_verification"> Require email code</label>'
+        '<button type="submit">Send invitation</button></form></section>'
+        + '<form method="post" action="api/session/end"><button class="danger" type="submit">End Demo Session &amp; Revoke All</button></form>'
         if active
         else '<form method="post" action="api/session/start">'
         '<label class="check"><input type="checkbox" name="email_verification"> Require email code</label>'
-        '<label for="verification-email">Viewer email (required when checked)</label>'
+        '<label for="verification-email">Viewer email (optional; entering one sends the links)</label>'
         '<input id="verification-email" name="verification_email" type="email" autocomplete="off">'
         '<button type="submit">Start Demo Session</button></form>'
     )
@@ -212,7 +239,7 @@ button,a{{padding:.8rem 1rem;margin-top:14px;border:0;border-radius:8px;font-wei
 </style></head><body><main><div class="eyebrow">DEVELOPMENT / DEMONSTRATION TOOL</div><h1>LayerV Demo Display</h1><section class="card">
 {f'<div class="notice">{escape(message)}</div>' if message else ''}<div class="state"><span class="dot"></span><strong>Demo Session: {'Active' if active else 'Not running'}</strong></div><dl>
 <dt>Renderer</dt><dd>{escape(current.state)}</dd><dt>Chromium</dt><dd>{'Running' if active else 'Not running'}</dd>
-<dt>LayerV</dt><dd>{publication}</dd><dt>Viewer access</dt><dd>{'Email code required' if VERIFICATION.required else 'Link only'}</dd>
+<dt>LayerV</dt><dd>{publication}</dd><dt>Invitations</dt><dd>{len(invitations)}</dd>
 <dt>Dashboard</dt><dd>{escape(settings.dashboard_path)}</dd><dt>Resolution</dt><dd>{width} × {height}</dd>
 <dt>Refresh</dt><dd>Live stream (1-second fallback)</dd><dt>Expires</dt><dd>{escape(expires)}</dd>
 <dt>Last frame</dt><dd>{escape(_age(current.last_frame_at))}</dd><dt>Capture time</dt><dd>{f'{current.frame_duration:.2f} seconds' if current.frame_duration is not None else '—'}</dd>
@@ -289,10 +316,15 @@ class Handler(BaseHTTPRequestHandler):
         if not SESSION.valid_token(token):
             self._send(404, b"This demo session has ended.\n", "text/plain; charset=utf-8", True)
             return True
-        if VERIFICATION.required and not VERIFICATION.authorized(self._grant_cookie()):
+        invitation = invitation_for(token)
+        if invitation is None:
+            self._send(404, b"This invitation has been revoked.\n", "text/plain; charset=utf-8", True)
+            return True
+        gate = invitation.verification
+        if gate.required and not gate.authorized(self._grant_cookie()):
             if action == "view":
                 try:
-                    VERIFICATION.ensure_code()
+                    gate.ensure_code()
                     error = ""
                 except VerificationError as delivery_error:
                     error = str(delivery_error)
@@ -400,12 +432,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._redirect_admin()
                 return
             try:
-                verification_email = (
-                    form.get("verification_email", "")
-                    if form.get("email_verification") == "on" else ""
-                )
-                VERIFICATION.begin(verification_email)
-                if verification_email and not (PUBLISHER and PUBLISHER.configured):
+                email = form.get("verification_email", "").strip()
+                require_code = form.get("email_verification") == "on"
+                if require_code and not email:
+                    raise VerificationError("Enter an email when verification is required")
+                if email and not (PUBLISHER and PUBLISHER.configured):
                     raise PublicationError(
                         "Connect LayerV before starting an emailed Demo Session"
                     )
@@ -413,25 +444,16 @@ class Handler(BaseHTTPRequestHandler):
                     SETTINGS.default_session_duration,
                     lambda token: run_renderer(SESSION, SETTINGS, os.getenv("SUPERVISOR_TOKEN", "")),
                 )
-                if PUBLISHER and PUBLISHER.configured:
-                    PUBLISHER.publish(token, SETTINGS.default_session_duration)
-                    if verification_email:
-                        try:
-                            VERIFICATION.send_invitation(
-                                PUBLISHER.activation_url,
-                                PUBLISHER.remote_url,
-                            )
-                            message = "Demo invitation sent to the authorized email address."
-                        except VerificationError as invitation_error:
-                            message = (
-                                "The session started, but the invitation email was not sent: "
-                                + str(invitation_error)
-                                + ". Copy the links below to share them manually."
-                            )
+                sent = self._create_invitation(token, email, require_code)
+                message = (
+                    "Demo invitation created and emailed."
+                    if sent or not email else
+                    "Demo invitation created, but email delivery failed; use the links below."
+                )
                 LOGGER.info("Demo Session started")
             except (RuntimeError, PublicationError, VerificationError) as error:
                 SESSION.end("failed")
-                VERIFICATION.end()
+                clear_invitations()
                 if PUBLISHER:
                     PUBLISHER.revoke()
                 set_admin_notice(str(error))
@@ -439,19 +461,46 @@ class Handler(BaseHTTPRequestHandler):
                 return
         elif path == "/api/session/end":
             SESSION.end("ended")
-            VERIFICATION.end()
+            clear_invitations()
             if PUBLISHER:
                 PUBLISHER.revoke()
             LOGGER.info("Demo Session ended")
+        elif path == "/api/invitations/create":
+            try:
+                email = form.get("verification_email", "").strip()
+                require_code = form.get("email_verification") == "on"
+                if require_code and not email:
+                    raise VerificationError("Enter an email when verification is required")
+                token = SESSION.issue_viewer_token()
+                sent = self._create_invitation(token, email, require_code)
+                message = (
+                    "Viewer invitation created and emailed."
+                    if sent or not email else
+                    "Viewer invitation created, but email delivery failed; use the links below."
+                )
+            except (RuntimeError, PublicationError, VerificationError) as error:
+                if 'token' in locals():
+                    SESSION.revoke_viewer_token(token)
+                message = str(error)
+        elif path == "/api/invitations/revoke":
+            invitation_id = form.get("invitation_id", "")
+            with INVITATIONS_LOCK:
+                invitation = next((item for item in INVITATIONS.values() if secrets.compare_digest(item.id, invitation_id)), None)
+                if invitation:
+                    INVITATIONS.pop(invitation.token, None)
+            if invitation:
+                SESSION.revoke_viewer_token(invitation.token)
+                invitation.verification.end()
+                if PUBLISHER:
+                    PUBLISHER.revoke(invitation.publication_id)
+                message = "Viewer invitation revoked."
+            else:
+                message = "Viewer invitation was already revoked."
         elif path == "/api/layerv/connect":
             try:
                 if PUBLISHER is None:
                     raise PublicationError("LayerV publisher is unavailable")
                 PUBLISHER.connect(form.get("api_key", ""))
-                current = SESSION.snapshot()
-                if current.active and current.token and not PUBLISHER.remote_url:
-                    remaining = max(1, int((current.expires_at - time.time()) / 60))
-                    PUBLISHER.publish(current.token, remaining)
                 message = "LayerV connected successfully."
             except PublicationError as error:
                 message = str(error)
@@ -468,6 +517,36 @@ class Handler(BaseHTTPRequestHandler):
             set_admin_notice(message)
         self._redirect_admin()
 
+    def _create_invitation(self, token: str, email: str, require_code: bool) -> bool:
+        with INVITATIONS_LOCK:
+            if len(INVITATIONS) >= 20:
+                raise PublicationError("A Demo Session supports at most 20 viewer invitations")
+        if PUBLISHER is None or not PUBLISHER.configured:
+            raise PublicationError("Connect LayerV before creating an invitation")
+        gate = VerificationGate()
+        gate.begin(email, required=require_code)
+        current = SESSION.snapshot()
+        remaining = max(1, int(((current.expires_at or time.time()) - time.time()) / 60))
+        published = PUBLISHER.publish(token, remaining)
+        if not all(published.get(key) for key in ("id", "activation_url", "remote_url")):
+            raise PublicationError("LayerV returned incomplete invitation data")
+        invitation = Invitation(
+            id=secrets.token_urlsafe(12), token=token, email=email,
+            verification=gate, publication_id=published["id"],
+            activation_url=published["activation_url"], remote_url=published["remote_url"],
+        )
+        with INVITATIONS_LOCK:
+            INVITATIONS[token] = invitation
+        if email:
+            try:
+                gate.send_invitation(invitation.activation_url, invitation.remote_url)
+            except VerificationError:
+                # Keep the independently revocable invitation available for manual sharing.
+                set_admin_notice("Invitation email failed; links remain available below.")
+                return False
+            return True
+        return False
+
     def _redirect_admin(self) -> None:
         # Every administrative action is exactly two path components beneath
         # the Ingress root. Returning there prevents later relative forms from
@@ -480,17 +559,18 @@ class Handler(BaseHTTPRequestHandler):
         )
 
     def _verification(self, token: str, action: str) -> None:
-        if not SESSION.valid_token(token) or not VERIFICATION.required:
+        invitation = invitation_for(token)
+        if not SESSION.valid_token(token) or invitation is None or not invitation.verification.required:
             self._send(404, b"This demo session has ended.\n", "text/plain; charset=utf-8", True)
             return
         try:
             form = self._form()
             if action == "verify_request":
-                VERIFICATION.request_code()
+                invitation.verification.request_code()
                 self._send(200, verification_html(token), "text/html; charset=utf-8", True, VERIFICATION_CSP)
                 return
             snapshot = SESSION.snapshot()
-            grant = VERIFICATION.confirm(form.get("code", ""), snapshot.expires_at or time.time())
+            grant = invitation.verification.confirm(form.get("code", ""), snapshot.expires_at or time.time())
             self._send(
                 303, b"", "text/plain; charset=utf-8", True,
                 extra_headers={
@@ -504,7 +584,7 @@ class Handler(BaseHTTPRequestHandler):
     def _sync_session(self) -> None:
         current = SESSION.snapshot()
         if not current.active and PUBLISHER and PUBLISHER.remote_url:
-            VERIFICATION.end()
+            clear_invitations()
             PUBLISHER.revoke()
 
 
@@ -526,7 +606,7 @@ def main() -> None:
         pass
     finally:
         SESSION.end("shutdown")
-        VERIFICATION.end()
+        clear_invitations()
         PUBLISHER.close()
         server.server_close()
         LOGGER.info("LayerV Demo Display stopped")

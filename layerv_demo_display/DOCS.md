@@ -89,6 +89,8 @@ configuration, routes, data, credentials, images, or containers.
 - `dashboard_path`: a relative local HA path such as `/demo-home/home`.
 - `resolution`: `1280x720` or `1920x1080`.
 - `capture_interval`: JPEG polling fallback interval, 1–10 seconds; default 1. The normal live stream captures shared frames at roughly 2–3 FPS.
+
+Each active Demo Session can have up to 20 independent viewer invitations. Entering an email sends that viewer the activation and display links even when email-code verification is not selected. Each invitation has its own qURL, display token, optional verification state, and revoke control; ending the Demo Session revokes all invitations and stops Chromium.
 - `default_session_duration`: 15, 30, 60, or 120 minutes; default 60.
 - `hide_ha_sidebar` and `hide_ha_header`: accepted settings; chrome hiding is
   not yet implemented.

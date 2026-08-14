@@ -88,6 +88,7 @@ class VerificationGate:
         self._clock = clock
         self._lock = threading.RLock()
         self._recipient = ""
+        self._required = False
         self._pending: PendingCode | None = None
         self._grants: dict[str, float] = {}
         self._last_delivery = 0.0
@@ -95,14 +96,15 @@ class VerificationGate:
     @property
     def required(self) -> bool:
         with self._lock:
-            return bool(self._recipient)
+            return self._required
 
-    def begin(self, recipient: str = "") -> None:
+    def begin(self, recipient: str = "", required: bool = True) -> None:
         email = recipient.strip().lower()
         if email and (len(email) > 320 or "@" not in email or not smtp_configured()):
             raise VerificationError("Configure SMTP and enter a valid verification email")
         with self._lock:
             self._recipient = email
+            self._required = bool(email and required)
             self._pending = None
             self._grants.clear()
             self._last_delivery = 0.0
@@ -110,6 +112,7 @@ class VerificationGate:
     def end(self) -> None:
         with self._lock:
             self._recipient = ""
+            self._required = False
             self._pending = None
             self._grants.clear()
 
@@ -151,6 +154,11 @@ class VerificationGate:
                 raise VerificationError("LayerV invitation links are unavailable")
         safe_activation = escape(activation_url, quote=True)
         safe_display = escape(display_url, quote=True)
+        code_note = (
+            "Opening the display sends a separate one-time verification code to this address."
+            if self.required else
+            "No verification code is required for this invitation."
+        )
         button = (
             "display:inline-block;padding:13px 18px;border-radius:10px;"
             "background:#1769d2;color:#ffffff;text-decoration:none;"
@@ -160,9 +168,9 @@ class VerificationGate:
             "You have been invited to a temporary LayerV Demo Display.\n\n"
             f"1. Activate LayerV access:\n{activation_url}\n\n"
             f"2. Open the Demo Display:\n{display_url}\n\n"
-            "Opening the display sends a separate one-time verification code to this address.\n"
+            f"{code_note}\n"
         )
-        html = f"""<!doctype html><html lang="en"><body style="margin:0;padding:28px 12px;background:#f3f6fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fff;border:1px solid #dfe6ef;border-radius:18px;overflow:hidden"><tr><td style="padding:24px 30px;background:#10233f;color:#fff"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#9fc7ff">LayerV Demo Display</div><h1 style="margin:8px 0 0;font-size:25px">Your demo invitation</h1></td></tr><tr><td style="padding:30px"><p style="margin:0 0 24px;font-size:16px;line-height:1.6">Complete both steps below to view the temporary read-only display.</p><div style="margin:0 0 24px;padding:20px;border:1px solid #dfe6ef;border-radius:12px"><strong>Step 1 — Activate LayerV access</strong><p><a href="{safe_activation}" style="{button}">Activate LayerV Access</a></p><div style="font-size:11px;overflow-wrap:anywhere">{safe_activation}</div></div><div style="margin:0 0 24px;padding:20px;border:1px solid #dfe6ef;border-radius:12px"><strong>Step 2 — Open the read-only display</strong><p><a href="{safe_display}" style="{button}">Open Demo Display</a></p><div style="font-size:11px;overflow-wrap:anywhere">{safe_display}</div></div><p style="color:#66758a;font-size:13px;line-height:1.6">Opening the display sends a separate one-time verification code to this email address.</p></td></tr></table></td></tr></table></body></html>"""
+        html = f"""<!doctype html><html lang="en"><body style="margin:0;padding:28px 12px;background:#f3f6fa;color:#172033;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fff;border:1px solid #dfe6ef;border-radius:18px;overflow:hidden"><tr><td style="padding:24px 30px;background:#10233f;color:#fff"><div style="font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:#9fc7ff">LayerV Demo Display</div><h1 style="margin:8px 0 0;font-size:25px">Your demo invitation</h1></td></tr><tr><td style="padding:30px"><p style="margin:0 0 24px;font-size:16px;line-height:1.6">Complete both steps below to view the temporary read-only display.</p><div style="margin:0 0 24px;padding:20px;border:1px solid #dfe6ef;border-radius:12px"><strong>Step 1 — Activate LayerV access</strong><p><a href="{safe_activation}" style="{button}">Activate LayerV Access</a></p><div style="font-size:11px;overflow-wrap:anywhere">{safe_activation}</div></div><div style="margin:0 0 24px;padding:20px;border:1px solid #dfe6ef;border-radius:12px"><strong>Step 2 — Open the read-only display</strong><p><a href="{safe_display}" style="{button}">Open Demo Display</a></p><div style="font-size:11px;overflow-wrap:anywhere">{safe_display}</div></div><p style="color:#66758a;font-size:13px;line-height:1.6">{escape(code_note)}</p></td></tr></table></td></tr></table></body></html>"""
         message = EmailMessage()
         message["Subject"] = "Your LayerV Demo Display invitation"
         message.set_content(text)

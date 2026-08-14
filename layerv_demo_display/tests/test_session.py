@@ -84,6 +84,16 @@ class SessionTests(unittest.TestCase):
         self.session.close_stream("stream-0")
         self.assertTrue(self.session.open_stream(token, "stream-5"))
 
+    def test_viewer_tokens_are_independently_revocable(self):
+        original = self.start()
+        second = self.session.issue_viewer_token()
+        self.assertTrue(self.session.valid_token(original))
+        self.assertTrue(self.session.valid_token(second))
+        self.assertTrue(self.session.revoke_viewer_token(original))
+        self.assertFalse(self.session.valid_token(original))
+        self.assertTrue(self.session.valid_token(second))
+        self.assertTrue(self.session.snapshot().active)
+
 
 if __name__ == "__main__":
     unittest.main()

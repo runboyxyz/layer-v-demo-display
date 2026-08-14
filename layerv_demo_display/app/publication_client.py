@@ -54,6 +54,11 @@ class LayerVPublisher:
     def activation_url(self) -> str:
         return str(self._call("status").get("activation_url") or "")
 
+    @property
+    def publications(self) -> list[dict[str, str]]:
+        value = self._call("status").get("publications")
+        return value if isinstance(value, list) else []
+
     def connect(self, api_key: str) -> None:
         self._call("connect", api_key=api_key)
 
@@ -61,13 +66,16 @@ class LayerVPublisher:
         # The isolated broker owns connector startup and recovery.
         self._call("status")
 
-    def publish(self, display_token: str, lifetime_minutes: int) -> str:
-        return str(self._call(
+    def publish(self, display_token: str, lifetime_minutes: int) -> dict[str, str]:
+        value = self._call(
             "publish", display_token=display_token, lifetime_minutes=lifetime_minutes
-        ))
+        )
+        if not isinstance(value, dict):
+            raise PublicationError("LayerV returned invalid publication data")
+        return {str(key): str(item) for key, item in value.items()}
 
-    def revoke(self) -> None:
-        self._call("revoke")
+    def revoke(self, publication_id: str = "") -> None:
+        self._call("revoke", publication_id=publication_id)
 
     def close(self) -> None:
         try:
