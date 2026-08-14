@@ -74,6 +74,9 @@ class ServerTests(unittest.TestCase):
     def test_video_viewer_uses_protected_video_then_image_fallback(self):
         page = viewer_html(3, video=True).decode()
         self.assertIn("/video", page)
+        self.assertIn("new MediaSource", page)
+        self.assertIn("source.appendBuffer", page)
+        self.assertIn("queue.splice(1)", page)
         self.assertIn("/stream", page)
         self.assertIn("/frame?t=", page)
         self.assertNotIn("homeassistant", page.lower())
@@ -84,6 +87,8 @@ class ServerTests(unittest.TestCase):
         self.assertIn("form-action 'self'", ADMIN_CSP)
         self.assertIn("frame-ancestors 'none'", VIEWER_CSP)
         self.assertIn("default-src 'none'", VIEWER_CSP)
+        self.assertIn("connect-src 'self'", viewer_csp(3, True))
+        self.assertIn("media-src 'self' blob:", viewer_csp(3, True))
 
     def test_verification_asks_only_for_code_and_supports_resend(self):
         page = verification_html("synthetic-token").decode()
