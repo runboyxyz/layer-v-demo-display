@@ -78,7 +78,14 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
                 headless=True,
                 # Experiment-only fallback for HA OS container namespaces.
                 # The browser remains non-root and AppArmor-confined.
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    # Error-level process diagnostics only. Chromium exits
+                    # before navigation in this failure mode, so no dashboard
+                    # URL, credential, or rendered content can be emitted.
+                    "--enable-logging=stderr",
+                ],
             )
             stage = "context"
             context = await browser.new_context(
