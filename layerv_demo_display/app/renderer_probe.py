@@ -102,7 +102,11 @@ async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
             await page.route("**/*", route_request)
             target = f"{HA_ORIGIN}{settings.dashboard_path}?external_auth=1"
             stage = "navigation"
-            await page.goto(target, wait_until="domcontentloaded", timeout=timeout_ms)
+            # HA dashboards can keep DOMContentLoaded pending while cards and
+            # integrations initialize. A committed same-origin response is the
+            # network boundary; frontend readiness is checked independently
+            # using the authoritative root element below.
+            await page.goto(target, wait_until="commit", timeout=timeout_ms)
             stage = "frontend"
             await page.wait_for_selector("home-assistant", state="attached", timeout=timeout_ms)
             await page.wait_for_timeout(2_000)
