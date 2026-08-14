@@ -46,13 +46,19 @@ def _own_tree(path: Path, uid: int) -> None:
             os.chown(Path(root) / name, uid, RUNTIME_GID)
 
 
+def _runtime_directory() -> None:
+    """Create a sticky shared socket directory owned by the supervisor."""
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+    os.chown(RUNTIME_DIR, 0, RUNTIME_GID)
+    RUNTIME_DIR.chmod(0o1770)
+
+
 def prepare_storage() -> None:
     _directory(SMTP_FILE.parent, SERVER_UID)
     for path in (SECRET_FILE.parent, CONNECTOR_CONFIG.parent, CONNECTOR_STATE, CONNECTOR_LOGS):
         _directory(path, CONNECTOR_UID)
         _own_tree(path, CONNECTOR_UID)
-    # The server may traverse to the fixed socket but cannot replace it.
-    _directory(RUNTIME_DIR, CONNECTOR_UID, 0o710)
+    _runtime_directory()
 
 
 def _demote(uid: int):

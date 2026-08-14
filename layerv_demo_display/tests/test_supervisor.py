@@ -14,6 +14,15 @@ class SupervisorTests(unittest.TestCase):
         self.assertNotIn('secrets/layerv-api-key', source)
 
     @patch("app.supervisor.os.chown")
+    def test_runtime_socket_directory_is_root_owned_and_sticky(self, chown):
+        with patch.object(Path, "mkdir"), patch.object(Path, "chmod") as chmod:
+            supervisor._runtime_directory()
+        chown.assert_called_once_with(
+            supervisor.RUNTIME_DIR, 0, supervisor.RUNTIME_GID
+        )
+        chmod.assert_called_once_with(0o1770)
+
+    @patch("app.supervisor.os.chown")
     def test_existing_non_root_directory_is_not_chmodded_by_bootstrap(self, chown):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "existing"
