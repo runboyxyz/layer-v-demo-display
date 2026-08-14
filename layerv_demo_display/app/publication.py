@@ -17,10 +17,10 @@ import uuid
 
 DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/data"))
 SECRET_FILE = DATA_DIR / "secrets" / "layerv-api-key"
-INSTALLATION_FILE = DATA_DIR / "layerv-installation-id"
 CONNECTOR_CONFIG = DATA_DIR / "connector-config" / "qurl-proxy.yaml"
 CONNECTOR_STATE = DATA_DIR / "connector-state"
 CONNECTOR_LOGS = DATA_DIR / "connector-logs"
+INSTALLATION_FILE = CONNECTOR_STATE / "installation-id"
 LAYERV_API = os.getenv("LAYERV_API_BASE_URL", "https://api.layerv.ai").rstrip("/")
 RESOURCE_PATTERN = re.compile(r"(?m)^\s*resource_id:\s*[\"']?([^#\s\"']+)")
 LOGGER = logging.getLogger("demo_display.publication")
@@ -100,14 +100,19 @@ class LayerVPublisher:
             raise PublicationError("Enter a valid LayerV API key")
         _atomic_write(SECRET_FILE, key + "\n")
         if not self._resource_id:
+            # Resolve and persist all fixed registration inputs before the
+            # subprocess exception boundary. Filesystem setup failures must
+            # never be mislabeled as connector exec denials.
+            connector_id = self._connector_id()
+            environment = self._environment(include_key=True)
             try:
                 completed = subprocess.run(  # nosec B603
                     [
                         "/usr/local/bin/qurl-connector", "-c", str(CONNECTOR_CONFIG),
                         "add", "--target", "http://127.0.0.1:8099",
-                        "--id", self._connector_id(), "--no-verify",
+                        "--id", connector_id, "--no-verify",
                     ],
-                    env=self._environment(include_key=True),
+                    env=environment,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,

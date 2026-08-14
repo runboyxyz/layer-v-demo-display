@@ -33,8 +33,6 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   /var/lib/dbus/machine-id r,
 
   /data/options.json r,
-  /data/layerv-installation-id rwk,
-  /data/.layerv-installation-id.tmp rwk,
   /data/secrets/{,**} rwk,
   /data/connector-config/{,**} rwk,
   /data/connector-state/{,**} rwk,

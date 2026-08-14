@@ -15,7 +15,7 @@ class PublicationTests(unittest.TestCase):
         self.paths = patch.multiple(
             publication,
             SECRET_FILE=root / "secrets" / "key",
-            INSTALLATION_FILE=root / "installation-id",
+            INSTALLATION_FILE=root / "state" / "installation-id",
             CONNECTOR_CONFIG=root / "connector" / "qurl-proxy.yaml",
             CONNECTOR_STATE=root / "state",
             CONNECTOR_LOGS=root / "logs",
@@ -48,6 +48,10 @@ class PublicationTests(unittest.TestCase):
         self.assertNotIn("synthetic-layer-v-key", command)
         self.assertEqual(environment["QURL_API_KEY_FILE"], str(publication.SECRET_FILE))
         self.assertEqual(publication.SECRET_FILE.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(
+            publication.INSTALLATION_FILE.parent,
+            publication.CONNECTOR_STATE,
+        )
 
     @patch("app.publication.subprocess.run")
     def test_timeout_recovers_route_written_before_late_bootstrap_stall(self, run):

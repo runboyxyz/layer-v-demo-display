@@ -45,6 +45,11 @@ class ConfigurationTests(unittest.TestCase):
         self.assertNotIn("/app/{,**}", child)
         self.assertNotIn("/data/options.json", child)
 
+    def test_installation_id_is_not_written_at_data_root(self):
+        source = (Path(__file__).parents[1] / "app" / "publication.py").read_text()
+        self.assertIn('INSTALLATION_FILE = CONNECTOR_STATE / "installation-id"', source)
+        self.assertNotIn('DATA_DIR / "layerv-installation-id"', source)
+
 
 if __name__ == "__main__":
     unittest.main()
