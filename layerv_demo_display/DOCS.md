@@ -9,7 +9,7 @@ Assistant frontend, session, API, cookies, or credentials.
 
 ## Current implementation
 
-Version 0.3.0 adds one temporary Demo Session. The Ingress administrator starts
+Version 0.4.0 adds one temporary Demo Session. The Ingress administrator starts
 and ends it explicitly. A dedicated non-root renderer launches Debian ARM64
 Chromium, authenticates through Home Assistant's external-authentication bridge
 using the App-scoped system token, restricts browser traffic to the fixed
@@ -21,11 +21,25 @@ methods. It intentionally does not advertise `externalAppV2` or an external
 messaging bus, because those interfaces require a broader native-app command
 contract that this pixel renderer neither needs nor implements.
 
+The App packages its own qURL Connector and registers a dedicated LayerV
+resource that targets only the pixel viewer on localhost. It never imports,
+changes, or reads credentials from the LayerV Gateway. The administrator enters
+a dedicated LayerV API key through Home Assistant Ingress; it is stored with
+mode `0600` beneath `/data/secrets` and passed to the Connector by file path,
+never as an argument or log field. Each Demo Session receives an expiring qURL,
+and manual End invalidates the local token before attempting remote revocation.
+
+Remote links support either direct bearer-link access or an optional email-code
+gate. Email mode requires independent SMTP settings in the App UI and a viewer
+email when the session starts. Six-digit codes expire after ten minutes, allow
+five attempts, and cannot be resent more than once per minute. A successful
+code creates only an in-memory, HttpOnly, Secure, SameSite grant bounded by the
+Demo Session expiry. No frame bytes are returned before verification.
+
 This remains an experiment. It deliberately uses
 Chromium's `--no-sandbox` mode because HA OS container namespaces must first be
 measured; Chromium remains a non-root UID under the AppArmor profile. This
-tradeoff must be revisited before production use. LayerV integration is not yet
-implemented.
+tradeoff must be revisited before production use.
 
 The renderer captures independently at the configured interval. Viewer
 requests return only the latest existing JPEG and never cause navigation or a
@@ -81,10 +95,10 @@ high-entropy display path, expiry, renderer health, last-frame age, capture
 duration, approximate viewer count, and consecutive failures. Only one session
 may be active. **End Demo Session** revokes it immediately.
 
-The App maps TCP port 8099 for the token-protected viewer. Until LayerV
-publication is implemented, combine the displayed path with the App host and
-port for a local test, for example `http://HA-HOST:8099/display/TOKEN`. Treat
-the path as a bearer secret. The page contains only minimal display HTML/JS and
+Connect LayerV once from the Ingress UI using a dedicated API key with connector
+bootstrap and qURL read/write scopes. Starting a session then displays its
+temporary remote LayerV link. Treat a link without email verification as a
+bearer secret. The page contains only minimal display HTML/JS and
 JPEG pixels; it contains no HA frontend code, cookie, API URL, WebSocket
 credential, iframe, or interactive dashboard surface.
 
@@ -112,8 +126,8 @@ no-store, no-referrer, and nosniff headers.
 
 ## Known limitations
 
-- LayerV publication is not yet implemented; port 8099 is for the current local
-  viewer test.
+- LayerV and SMTP onboarding are intentionally minimal development UI and do not
+  yet include credential rotation or destructive connector reset flows.
 - The renderer has three bounded frame retries but not yet one full controlled
   Chromium restart.
 - HA sidebar/header hiding is not yet implemented.

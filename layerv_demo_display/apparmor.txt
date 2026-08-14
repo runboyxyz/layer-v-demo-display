@@ -7,6 +7,7 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   /usr/local/bin/python rix,
   /usr/local/bin/python3 rix,
   /usr/local/bin/python3.12 rix,
+  /usr/local/bin/qurl-connector rix,
   /usr/local/lib/** mr,
   # Playwright's Python client starts this fixed, packaged protocol driver.
   /usr/local/lib/python3.12/site-packages/playwright/driver/node rix,
@@ -22,14 +23,22 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
 
   /etc/hosts r,
   /etc/hostname r,
+  /etc/machine-id r,
   /etc/nsswitch.conf r,
   /etc/passwd r,
   /etc/group r,
   /etc/resolv.conf r,
   /etc/ssl/openssl.cnf r,
   /etc/ssl/certs/{,**} r,
+  /var/lib/dbus/machine-id r,
 
   /data/options.json r,
+  /data/layerv-installation-id rwk,
+  /data/.layerv-installation-id.tmp rwk,
+  /data/secrets/{,**} rwk,
+  /data/connector-config/{,**} rwk,
+  /data/connector-state/{,**} rwk,
+  /data/connector-logs/{,**} rwk,
   /tmp/{,**} rwk,
   /dev/shm/{,**} rwk,
   /proc/{,**} r,
@@ -50,6 +59,7 @@ profile layerv_demo_display flags=(attach_disconnected,mediate_deleted) {
   # drops to the dedicated runtime identity before binding the HTTP listener.
   capability setuid,
   capability setgid,
+  capability chown,
 
   signal (send, receive) peer=layerv_demo_display,
   signal (receive) set=(int, term),

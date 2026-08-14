@@ -24,9 +24,13 @@ class ServerTests(unittest.TestCase):
         self.assertFalse(trusted_ingress("172.30.32.2", "/display/token"))
         self.assertFalse(trusted_ingress("172.30.32.2", path + "\nspoof"))
 
-    def test_public_route_accepts_only_display_and_frame(self):
-        self.assertEqual(display_parts("/display/token"), ("token", False))
-        self.assertEqual(display_parts("/display/token/frame"), ("token", True))
+    def test_public_route_accepts_only_display_and_verification_routes(self):
+        self.assertEqual(display_parts("/display/token"), ("token", "view"))
+        self.assertEqual(display_parts("/display/token/frame"), ("token", "frame"))
+        self.assertEqual(
+            display_parts("/display/token/verify/request"),
+            ("token", "verify_request"),
+        )
         for path in ("/display", "/display/token/admin", "/api/status", "/display//frame"):
             self.assertIsNone(display_parts(path))
 
