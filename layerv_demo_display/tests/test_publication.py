@@ -61,6 +61,16 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(result, "https://demo.qurl.site/display/display-secret")
         self.assertNotIn("homeassistant", result)
 
+    @patch("app.publication.os.chown")
+    def test_storage_mode_is_set_while_bootstrap_still_owns_directory(self, chown):
+        publication.prepare_storage(2200, 2200)
+        calls = [call.args for call in chown.call_args_list]
+        secret_directory = publication.SECRET_FILE.parent
+        first = calls.index((secret_directory, 0, 0))
+        second = calls.index((secret_directory, 2200, 2200))
+        self.assertLess(first, second)
+        self.assertEqual(secret_directory.stat().st_mode & 0o777, 0o700)
+
 
 if __name__ == "__main__":
     unittest.main()
