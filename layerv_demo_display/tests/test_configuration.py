@@ -50,6 +50,16 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("chmod 0755 /run.sh /usr/local/bin/qurl-connector", dockerfile)
         self.assertIn("test -x /usr/local/bin/qurl-connector", dockerfile)
 
+    def test_app_and_publish_workflow_support_arm64_and_amd64(self):
+        app_root = Path(__file__).parents[1]
+        config = (app_root / "config.yaml").read_text(encoding="utf-8")
+        workflow = (app_root.parent / ".github/workflows/publish-ha-app.yml").read_text(encoding="utf-8")
+        self.assertIn("- aarch64", config)
+        self.assertIn("- amd64", config)
+        self.assertIn("platform: linux/arm64", workflow)
+        self.assertIn("platform: linux/amd64", workflow)
+        self.assertIn("imagetools create", workflow)
+
     def test_connector_apparmor_rule_allows_its_executable_mapping(self):
         profile = (Path(__file__).parents[1] / "apparmor.txt").read_text()
         self.assertIn("/usr/local/bin/qurl-connector rix,", profile)

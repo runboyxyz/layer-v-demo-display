@@ -63,7 +63,7 @@ pulls that image instead of compiling Chromium locally.
 
 Version 0.1.1 provides only:
 
-- Home Assistant App packaging for `aarch64`;
+- Home Assistant App packaging for `aarch64` and `amd64`;
 - an administrator-only Home Assistant Ingress status page;
 - validated future renderer settings;
 - a dependency-free Python web server that reads Supervisor-owned options in a
