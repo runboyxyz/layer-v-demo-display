@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from app.configuration import ConfigurationError, parse_settings, validate_dashboard_path
 
@@ -29,6 +30,11 @@ class ConfigurationTests(unittest.TestCase):
         ):
             with self.subTest(options=options), self.assertRaises(ConfigurationError):
                 parse_settings(options)
+
+    def test_connector_is_made_executable_in_final_image(self):
+        dockerfile = (Path(__file__).parents[1] / "Dockerfile").read_text()
+        self.assertIn("chmod 0755 /run.sh /usr/local/bin/qurl-connector", dockerfile)
+        self.assertIn("test -x /usr/local/bin/qurl-connector", dockerfile)
 
 
 if __name__ == "__main__":

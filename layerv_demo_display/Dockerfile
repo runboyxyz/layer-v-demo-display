@@ -31,7 +31,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && pip install --no-cache-dir playwright==1.61.0 \
     && useradd --uid 2200 --user-group --create-home --shell /usr/sbin/nologin demo-display \
-    && chmod 0755 /run.sh \
+    && chmod 0755 /run.sh /usr/local/bin/qurl-connector \
+    && test -x /usr/local/bin/qurl-connector \
     && mkdir -p /data/secrets /data/connector-config /data/connector-state /data/connector-logs \
     && mkdir -p /var/log/layerv \
     && ln -s /data/connector-logs /var/log/layerv/qurl-connector \
