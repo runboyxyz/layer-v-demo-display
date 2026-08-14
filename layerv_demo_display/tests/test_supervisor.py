@@ -8,6 +8,11 @@ from app import supervisor
 
 
 class SupervisorTests(unittest.TestCase):
+    def test_supervisor_never_reads_server_owned_legacy_key(self):
+        source = Path(supervisor.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("LEGACY_KEY", source)
+        self.assertNotIn('secrets/layerv-api-key', source)
+
     @patch("app.supervisor.os.chown")
     def test_existing_non_root_directory_is_not_chmodded_by_bootstrap(self, chown):
         with tempfile.TemporaryDirectory() as root:

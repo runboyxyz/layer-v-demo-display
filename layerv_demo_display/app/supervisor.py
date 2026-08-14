@@ -7,7 +7,6 @@ import os
 from dataclasses import asdict
 import json
 from pathlib import Path
-import shutil
 import signal
 import subprocess
 import sys
@@ -24,7 +23,6 @@ CONNECTOR_UID = 2201
 RUNTIME_GID = 2202
 RUNTIME_DIR = Path("/run/layerv-demo")
 PUBLICATION_SOCKET = RUNTIME_DIR / "publication.sock"
-LEGACY_KEY = Path("/data/secrets/layerv-api-key")
 
 
 def _directory(path: Path, uid: int, mode: int = 0o700) -> None:
@@ -55,10 +53,6 @@ def prepare_storage() -> None:
         _own_tree(path, CONNECTOR_UID)
     # The server may traverse to the fixed socket but cannot replace it.
     _directory(RUNTIME_DIR, CONNECTOR_UID, 0o710)
-    if LEGACY_KEY.is_file() and not SECRET_FILE.exists():
-        shutil.move(LEGACY_KEY, SECRET_FILE)
-        os.chown(SECRET_FILE, CONNECTOR_UID, RUNTIME_GID)
-        SECRET_FILE.chmod(0o600)
 
 
 def _demote(uid: int):
