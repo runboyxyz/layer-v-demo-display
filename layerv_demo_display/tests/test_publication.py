@@ -62,13 +62,12 @@ class PublicationTests(unittest.TestCase):
         self.assertNotIn("homeassistant", result)
 
     @patch("app.publication.os.chown")
-    def test_storage_mode_is_set_while_bootstrap_still_owns_directory(self, chown):
+    def test_runtime_owner_secures_storage_after_bootstrap(self, chown):
         publication.prepare_storage(2200, 2200)
-        calls = [call.args for call in chown.call_args_list]
         secret_directory = publication.SECRET_FILE.parent
-        first = calls.index((secret_directory, 0, 0))
-        second = calls.index((secret_directory, 2200, 2200))
-        self.assertLess(first, second)
+        chown.assert_any_call(secret_directory, 2200, 2200)
+        secret_directory.chmod(0o755)
+        publication.secure_storage_modes()
         self.assertEqual(secret_directory.stat().st_mode & 0o777, 0o700)
 
 

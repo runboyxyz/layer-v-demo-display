@@ -16,7 +16,12 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from .configuration import Settings, load_settings
-from .publication import LayerVPublisher, PublicationError, prepare_storage
+from .publication import (
+    LayerVPublisher,
+    PublicationError,
+    prepare_storage,
+    secure_storage_modes,
+)
 from .renderer import run_renderer
 from .session import DemoSession
 from .verification import (
@@ -416,6 +421,7 @@ def main() -> None:
     SETTINGS = load_settings()
     prepare_storage(RUNTIME_UID, RUNTIME_GID)
     drop_runtime_identity()
+    secure_storage_modes()
     PUBLISHER = LayerVPublisher()
     PUBLISHER.start_connector()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)

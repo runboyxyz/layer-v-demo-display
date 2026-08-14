@@ -31,16 +31,14 @@ class PublicationError(RuntimeError):
 def prepare_storage(uid: int, gid: int) -> None:
     """Prepare HA-managed /data while the bootstrap process is still root."""
     for path in (SECRET_FILE.parent, CONNECTOR_CONFIG.parent, CONNECTOR_STATE, CONNECTOR_LOGS):
-        path.mkdir(parents=True, exist_ok=True)
-        # Existing App data may already belong to the runtime identity. Take
-        # ownership only long enough to set the restrictive mode, then hand it
-        # back. This avoids requiring CAP_FOWNER in the AppArmor profile.
-        os.chown(path, 0, 0)
-        path.chmod(0o700)
+        path.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chown(path, uid, gid)
-    for path in (SECRET_FILE, INSTALLATION_FILE, CONNECTOR_CONFIG):
-        if path.exists():
-            os.chown(path, uid, gid)
+
+
+def secure_storage_modes() -> None:
+    """Set directory modes only after permanently becoming their owner."""
+    for path in (SECRET_FILE.parent, CONNECTOR_CONFIG.parent, CONNECTOR_STATE, CONNECTOR_LOGS):
+        path.chmod(0o700)
 
 
 def _atomic_write(path: Path, value: str, mode: int = 0o600) -> None:
