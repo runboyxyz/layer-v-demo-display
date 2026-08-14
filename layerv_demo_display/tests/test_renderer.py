@@ -2,7 +2,7 @@ import asyncio
 import time
 import unittest
 
-from app.renderer import _apply_chrome_visibility, _bounded
+from app.renderer import VIDEO_HEARTBEAT_SECONDS, _apply_chrome_visibility, _bounded
 
 
 class FakePage:
@@ -12,6 +12,9 @@ class FakePage:
 
 
 class RendererLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    def test_video_heartbeat_avoids_constant_duplicate_encoding(self):
+        self.assertGreaterEqual(VIDEO_HEARTBEAT_SECONDS, 2.0)
+
     async def test_shell_visibility_options_reach_open_shadow_roots(self):
         page = FakePage()
         settings = type(

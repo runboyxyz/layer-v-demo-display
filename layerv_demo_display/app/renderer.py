@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from hashlib import sha256
 import logging
 import threading
 import time
@@ -13,6 +14,7 @@ from .video import FragmentedMP4, ffmpeg_command
 
 
 LOGGER = logging.getLogger("demo_display.renderer")
+VIDEO_HEARTBEAT_SECONDS = 2.0
 
 
 def run_renderer(session, settings, token: str) -> None:
@@ -144,6 +146,8 @@ async def _video_loop(context, page, session, settings) -> None:
     })
     LOGGER.info("Experimental video encoder started: resolution=%sx%s target_fps=%s", width, height, settings.renderer_target_fps)
     latest = None
+    last_digest = None
+    last_encoded = 0.0
     interval = 1 / settings.renderer_target_fps
     try:
         while not session.stop_event.is_set() and session.snapshot().active:
@@ -152,11 +156,17 @@ async def _video_loop(context, page, session, settings) -> None:
                 latest = await asyncio.wait_for(frames.get(), timeout=interval)
             except asyncio.TimeoutError:
                 pass
-            if latest is not None:
+            now = time.monotonic()
+            digest = sha256(latest).digest() if latest is not None else None
+            changed = digest is not None and digest != last_digest
+            heartbeat_due = latest is not None and now - last_encoded >= VIDEO_HEARTBEAT_SECONDS
+            if changed or heartbeat_due:
                 session.publish_frame(latest, time.monotonic() - started)
                 assert process.stdin is not None
                 process.stdin.write(latest)
                 await process.stdin.drain()
+                last_digest = digest
+                last_encoded = now
             if process.returncode is not None:
                 raise RuntimeError("Video encoder stopped")
             remaining = interval - (time.monotonic() - started)
