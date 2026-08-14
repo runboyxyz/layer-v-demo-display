@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import logging
 import os
@@ -58,16 +59,21 @@ def run_probe(settings, token: str, timeout_ms: int = 45_000) -> ProbeResult:
     """Render once and always close the isolated Chromium instance."""
     if not token:
         return ProbeResult("failed", "Home Assistant did not provide an App token")
-    from playwright.sync_api import TimeoutError as PlaywrightTimeout
-    from playwright.sync_api import sync_playwright
+    return asyncio.run(_run_probe(settings, token, timeout_ms))
+
+
+async def _run_probe(settings, token: str, timeout_ms: int) -> ProbeResult:
+    """Use the async transport so early driver errors are not masked."""
+    from playwright.async_api import TimeoutError as PlaywrightTimeout
+    from playwright.async_api import async_playwright
 
     width, height = settings.viewport
     browser = context = None
     stage = "playwright_driver"
     try:
-        with sync_playwright() as playwright:
+        async with async_playwright() as playwright:
             stage = "chromium_launch"
-            browser = playwright.chromium.launch(
+            browser = await playwright.chromium.launch(
                 executable_path=CHROMIUM,
                 headless=True,
                 # Experiment-only fallback for HA OS container namespaces.
@@ -75,32 +81,32 @@ def run_probe(settings, token: str, timeout_ms: int = 45_000) -> ProbeResult:
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
             stage = "context"
-            context = browser.new_context(
+            context = await browser.new_context(
                 viewport={"width": width, "height": height},
                 service_workers="block",
             )
             stage = "page"
-            page = context.new_page()
-            page.expose_function("__demoDisplayToken", lambda: token)
-            page.add_init_script(script=external_auth_script())
+            page = await context.new_page()
+            await page.expose_function("__demoDisplayToken", lambda: token)
+            await page.add_init_script(script=external_auth_script())
 
-            def route_request(route):
+            async def route_request(route):
                 if allowed_request(route.request.url):
-                    route.continue_()
+                    await route.continue_()
                 else:
-                    route.abort("blockedbyclient")
+                    await route.abort("blockedbyclient")
 
-            page.route("**/*", route_request)
+            await page.route("**/*", route_request)
             target = f"{HA_ORIGIN}{settings.dashboard_path}?external_auth=1"
             stage = "navigation"
-            page.goto(target, wait_until="domcontentloaded", timeout=timeout_ms)
+            await page.goto(target, wait_until="domcontentloaded", timeout=timeout_ms)
             stage = "frontend"
-            page.wait_for_selector("home-assistant", state="attached", timeout=timeout_ms)
-            page.wait_for_timeout(2_000)
+            await page.wait_for_selector("home-assistant", state="attached", timeout=timeout_ms)
+            await page.wait_for_timeout(2_000)
             if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
                 return ProbeResult("failed", "Home Assistant did not accept the App identity")
             stage = "capture"
-            frame = page.screenshot(type="jpeg", quality=75, full_page=False)
+            frame = await page.screenshot(type="jpeg", quality=75, full_page=False)
             return ProbeResult("succeeded", "Authenticated dashboard pixels captured", frame)
     except PlaywrightTimeout:
         LOGGER.warning("Authentication probe timed out: stage=%s", stage)
@@ -118,11 +124,11 @@ def run_probe(settings, token: str, timeout_ms: int = 45_000) -> ProbeResult:
     finally:
         if context is not None:
             try:
-                context.close()
+                await context.close()
             except Exception:
                 pass
         if browser is not None:
             try:
-                browser.close()
+                await browser.close()
             except Exception:
                 pass
