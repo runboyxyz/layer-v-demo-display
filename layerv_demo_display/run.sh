@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
 
-exec python -m app.server
+exec python -m app.supervisor

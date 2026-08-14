@@ -16,12 +16,8 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from .configuration import Settings, load_settings
-from .publication import (
-    LayerVPublisher,
-    PublicationError,
-    prepare_storage,
-    secure_storage_modes,
-)
+from .publication import PublicationError
+from .publication_client import LayerVPublisher
 from .renderer import run_renderer
 from .session import DemoSession
 from .verification import (
@@ -34,8 +30,6 @@ from .verification import (
 
 LOGGER = logging.getLogger("demo_display")
 PORT = int(os.getenv("INGRESS_PORT", "8099"))
-RUNTIME_UID = int(os.getenv("APP_RUNTIME_UID", "2200"))
-RUNTIME_GID = int(os.getenv("APP_RUNTIME_GID", "2200"))
 SETTINGS = Settings()
 SESSION = DemoSession()
 PUBLISHER: LayerVPublisher | None = None
@@ -104,16 +98,6 @@ def take_admin_notice() -> str:
         value = ADMIN_NOTICE
         ADMIN_NOTICE = ""
         return value
-
-
-def drop_runtime_identity(uid: int = RUNTIME_UID, gid: int = RUNTIME_GID) -> None:
-    if os.geteuid() != 0:
-        return
-    os.setgroups([])
-    os.setgid(gid)
-    os.setuid(uid)
-    if os.geteuid() == 0 or os.getegid() == 0:
-        raise RuntimeError("Could not drop the bootstrap identity")
 
 
 def display_parts(path: str) -> tuple[str, str] | None:
@@ -461,9 +445,8 @@ def main() -> None:
     global SETTINGS, PUBLISHER
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     SETTINGS = load_settings()
-    prepare_storage(RUNTIME_UID, RUNTIME_GID)
-    drop_runtime_identity()
-    secure_storage_modes()
+    if os.geteuid() == 0:
+        raise RuntimeError("HTTP server must be launched by the runtime supervisor")
     PUBLISHER = LayerVPublisher()
     PUBLISHER.start_connector()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)

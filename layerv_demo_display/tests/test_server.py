@@ -7,7 +7,6 @@ from app.server import (
     COMMON_HEADERS,
     VIEWER_CSP,
     display_parts,
-    drop_runtime_identity,
     status_html,
     status_payload,
     set_admin_notice,
@@ -66,20 +65,6 @@ class ServerTests(unittest.TestCase):
         set_admin_notice("x" * 600)
         self.assertEqual(take_admin_notice(), "x" * 500)
         self.assertEqual(take_admin_notice(), "")
-
-    @patch("app.server.os.setuid")
-    @patch("app.server.os.setgid")
-    @patch("app.server.os.setgroups")
-    @patch("app.server.os.getegid", return_value=2200)
-    @patch("app.server.os.geteuid", side_effect=(0, 2200))
-    def test_root_bootstrap_drops_all_groups_and_identity(
-        self, getuid, getgid, setgroups, setgid, setuid
-    ):
-        drop_runtime_identity(2200, 2200)
-        setgroups.assert_called_once_with([])
-        setgid.assert_called_once_with(2200)
-        setuid.assert_called_once_with(2200)
-
 
 if __name__ == "__main__":
     unittest.main()

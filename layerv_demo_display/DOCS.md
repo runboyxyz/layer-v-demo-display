@@ -9,7 +9,7 @@ Assistant frontend, session, API, cookies, or credentials.
 
 ## Current implementation
 
-Version 0.4.0 adds one temporary Demo Session. The Ingress administrator starts
+Version 0.5.0 provides one temporary Demo Session. The Ingress administrator starts
 and ends it explicitly. A dedicated non-root renderer launches Debian ARM64
 Chromium, authenticates through Home Assistant's external-authentication bridge
 using the App-scoped system token, restricts browser traffic to the fixed
@@ -25,7 +25,7 @@ The App packages its own qURL Connector and registers a dedicated LayerV
 resource that targets only the pixel viewer on localhost. It never imports,
 changes, or reads credentials from the LayerV Gateway. The administrator enters
 a dedicated LayerV API key through Home Assistant Ingress; it is stored with
-mode `0600` beneath `/data/secrets` and passed to the Connector by file path,
+mode `0600` beneath `/data/connector-secrets` and passed to the Connector by file path,
 never as an argument or log field. Each Demo Session receives an expiring qURL,
 and manual End invalidates the local token before attempting remote revocation.
 
@@ -40,6 +40,14 @@ This remains an experiment. It deliberately uses
 Chromium's `--no-sandbox` mode because HA OS container namespaces must first be
 measured; Chromium remains a non-root UID under the AppArmor profile. This
 tradeoff must be revisited before production use.
+
+A minimal root supervisor performs only fixed storage ownership and process
+lifecycle setup. It then launches the HTTP/Chromium process as UID 2200 and the
+LayerV publisher/connector process as UID 2201. Their persistent directories
+are mode `0700`, and a bounded Unix socket is their only control channel. The
+connector process receives neither `SUPERVISOR_TOKEN` nor SMTP credentials;
+the HTTP process cannot read the LayerV API key, connector identity, or private
+key state. Both remain confined by the AppArmor allowlist.
 
 The renderer captures independently at the configured interval. Viewer
 requests return only the latest existing JPEG and never cause navigation or a

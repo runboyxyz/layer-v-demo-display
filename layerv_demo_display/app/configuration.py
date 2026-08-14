@@ -84,6 +84,12 @@ def parse_settings(value: object) -> Settings:
 
 
 def load_settings(path: Path = OPTIONS_FILE) -> Settings:
+    runtime_value = os.getenv("APP_SETTINGS_JSON")
+    if runtime_value is not None:
+        try:
+            return parse_settings(json.loads(runtime_value))
+        except (json.JSONDecodeError, ConfigurationError) as error:
+            raise ConfigurationError("Could not read validated runtime settings") from error
     try:
         content = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:

@@ -1,7 +1,9 @@
+import json
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
-from app.configuration import ConfigurationError, parse_settings, validate_dashboard_path
+from app.configuration import ConfigurationError, load_settings, parse_settings, validate_dashboard_path
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -9,6 +11,10 @@ class ConfigurationTests(unittest.TestCase):
         settings = parse_settings({})
         self.assertEqual(settings.viewport, (1920, 1080))
         self.assertEqual(settings.capture_interval, 2)
+
+    @patch.dict("os.environ", {"APP_SETTINGS_JSON": json.dumps({"capture_interval": 4})})
+    def test_validated_runtime_settings_avoid_supervisor_owned_file(self):
+        self.assertEqual(load_settings().capture_interval, 4)
 
     def test_accepts_demo_dashboard(self):
         self.assertEqual(validate_dashboard_path("/demo-home/home"), "/demo-home/home")
@@ -38,16 +44,14 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_connector_apparmor_rule_allows_its_executable_mapping(self):
         profile = (Path(__file__).parents[1] / "apparmor.txt").read_text()
-        self.assertIn("/usr/local/bin/qurl-connector rcx -> connector,", profile)
-        self.assertIn("profile connector {", profile)
-        child = profile.split("profile connector {", 1)[1]
-        self.assertIn("/proc/{,**} r,", child)
-        self.assertIn("/sys/devices/system/cpu/** r,", child)
-        self.assertIn("network unix stream,", child)
-        self.assertIn("network unix dgram,", child)
-        self.assertIn("/data/secrets/layerv-api-key r,", child)
-        self.assertNotIn("/app/{,**}", child)
-        self.assertNotIn("/data/options.json", child)
+        self.assertIn("/usr/local/bin/qurl-connector rix,", profile)
+        self.assertNotIn("profile connector {", profile)
+
+    def test_container_defines_separate_server_and_connector_users(self):
+        dockerfile = (Path(__file__).parents[1] / "Dockerfile").read_text()
+        self.assertIn("--uid 2200 --gid 2202", dockerfile)
+        self.assertIn("--uid 2201 --gid 2202", dockerfile)
+        self.assertIn("/data/connector-secrets", dockerfile)
 
     def test_installation_id_is_not_written_at_data_root(self):
         source = (Path(__file__).parents[1] / "app" / "publication.py").read_text()

@@ -16,7 +16,7 @@ import uuid
 
 
 DATA_DIR = Path(os.getenv("APP_DATA_DIR", "/data"))
-SECRET_FILE = DATA_DIR / "secrets" / "layerv-api-key"
+SECRET_FILE = DATA_DIR / "connector-secrets" / "layerv-api-key"
 CONNECTOR_CONFIG = DATA_DIR / "connector-config" / "qurl-proxy.yaml"
 CONNECTOR_STATE = DATA_DIR / "connector-state"
 CONNECTOR_LOGS = DATA_DIR / "connector-logs"
@@ -30,15 +30,8 @@ class PublicationError(RuntimeError):
     """Safe administrator-facing publication failure."""
 
 
-def prepare_storage(uid: int, gid: int) -> None:
-    """Prepare HA-managed /data while the bootstrap process is still root."""
-    for path in (SECRET_FILE.parent, CONNECTOR_CONFIG.parent, CONNECTOR_STATE, CONNECTOR_LOGS):
-        path.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chown(path, uid, gid)
-
-
 def secure_storage_modes() -> None:
-    """Set directory modes only after permanently becoming their owner."""
+    """Set directory modes after the supervisor assigns their owner."""
     for path in (SECRET_FILE.parent, CONNECTOR_CONFIG.parent, CONNECTOR_STATE, CONNECTOR_LOGS):
         path.chmod(0o700)
 
