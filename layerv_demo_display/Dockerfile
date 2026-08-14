@@ -1,7 +1,7 @@
 FROM python:3.12-slim-bookworm
 
 ARG BUILD_ARCH
-ARG BUILD_VERSION=0.1.1
+ARG BUILD_VERSION=0.2.0
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -20,7 +20,11 @@ WORKDIR /app
 COPY app ./app
 COPY run.sh /run.sh
 
-RUN useradd --uid 2200 --user-group --create-home --shell /usr/sbin/nologin demo-display \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium fonts-liberation \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir playwright==1.61.0 \
+    && useradd --uid 2200 --user-group --create-home --shell /usr/sbin/nologin demo-display \
     && chmod 0755 /run.sh \
     && chown -R demo-display:demo-display /app
 

@@ -22,7 +22,7 @@ class ServerTests(unittest.TestCase):
     def test_status_is_inactive_and_has_no_renderer(self):
         payload = status_payload(Settings())
         self.assertEqual(payload["session"], "inactive")
-        self.assertEqual(payload["renderer"], "not_installed")
+        self.assertEqual(payload["renderer"], "probe_only")
         self.assertFalse(payload["chromium_running"])
 
     def test_status_page_contains_no_session_action(self):

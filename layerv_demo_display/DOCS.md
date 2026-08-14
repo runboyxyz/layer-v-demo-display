@@ -7,7 +7,22 @@ Assistant dashboard locally and send only encoded image frames to a temporary,
 token-protected display page. The remote viewer will never receive the Home
 Assistant frontend, session, API, cookies, or credentials.
 
-## Current Phase 1 behavior
+## Current authentication experiment
+
+Version 0.2.0 adds Debian ARM64 Chromium and Python Playwright only to this
+standalone App. The Ingress administrator can run one bounded authentication
+probe. It creates a fresh browser context, supplies the App-scoped system token
+through Home Assistant's documented external-authentication bridge, restricts
+network requests to the fixed `homeassistant:8123` origin, captures at most one
+in-memory JPEG, and closes the context and browser in all result paths.
+
+This is an experiment, not a supported session renderer. It deliberately uses
+Chromium's `--no-sandbox` mode because HA OS container namespaces must first be
+measured; the browser remains a non-root UID under the AppArmor profile. This
+tradeoff must be revisited before periodic rendering. There is still no public
+display listener, display token, session, capture loop, or LayerV integration.
+
+## Phase 1 baseline
 
 Version 0.1.1 provides only:
 
@@ -19,9 +34,9 @@ Version 0.1.1 provides only:
   before opening its listener;
 - an enforced AppArmor allowlist.
 
-There is no Chromium package, renderer, display listener, public display URL,
-LayerV API integration, or active Demo Session in this phase. Starting or
-restarting the App always reports `Demo Session: Not running`.
+The Phase 1 baseline contained no Chromium package or renderer. Version 0.2.0
+retains the same inactive default and adds only the bounded probe described
+above. Starting or restarting the App always reports `Demo Session: Not running`.
 
 ## Installation
 

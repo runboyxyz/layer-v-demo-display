@@ -7,9 +7,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
 import os
+import threading
 from urllib.parse import urlsplit
 
 from .configuration import ConfigurationError, Settings, load_settings
+from .renderer_probe import ProbeResult, run_probe
 
 
 LOGGER = logging.getLogger("demo_display")
@@ -17,6 +19,8 @@ PORT = int(os.getenv("INGRESS_PORT", "8099"))
 RUNTIME_UID = int(os.getenv("APP_RUNTIME_UID", "2200"))
 RUNTIME_GID = int(os.getenv("APP_RUNTIME_GID", "2200"))
 SETTINGS = Settings()
+PROBE = ProbeResult("not_run", "Authentication probe has not run")
+PROBE_LOCK = threading.Lock()
 TRUSTED_PROXIES = frozenset(
     item.strip()
     for item in os.getenv("TRUSTED_INGRESS_PROXIES", "172.30.32.2").split(",")
@@ -26,7 +30,7 @@ SECURITY_HEADERS = {
     "Cache-Control": "no-store",
     "Content-Security-Policy": (
         "default-src 'none'; style-src 'unsafe-inline'; "
-        "img-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'"
+        "img-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'"
     ),
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
@@ -59,12 +63,13 @@ def status_payload(settings: Settings) -> dict:
         "development_tool": True,
         "phase": 1,
         "session": "inactive",
-        "renderer": "not_installed",
+        "renderer": "probe_only",
         "chromium_running": False,
         "dashboard_path": settings.dashboard_path,
         "viewport": {"width": width, "height": height},
         "capture_interval_seconds": settings.capture_interval,
         "default_session_duration_minutes": settings.default_session_duration,
+        "authentication_probe": PROBE.outcome,
     }
 
 
@@ -91,11 +96,14 @@ footer {{ color:#7f8997; margin-top:22px; font-size:.85rem; }}
 <h1>LayerV Demo Display</h1><section class="card">
 <div class="state"><span class="dot"></span><strong>Demo Session: Not running</strong></div>
 <dl><dt>Phase</dt><dd>1 — App packaging and status UI</dd>
-<dt>Renderer</dt><dd>Not installed</dd><dt>Chromium</dt><dd>Not running</dd>
+<dt>Renderer</dt><dd>One-shot authentication probe only</dd><dt>Chromium</dt><dd>Not running</dd>
 <dt>Dashboard</dt><dd>{escape(settings.dashboard_path)}</dd>
 <dt>Resolution</dt><dd>{width} × {height}</dd>
 <dt>Future refresh</dt><dd>{settings.capture_interval} seconds</dd>
-<dt>Future duration</dt><dd>{settings.default_session_duration} minutes</dd></dl>
+<dt>Future duration</dt><dd>{settings.default_session_duration} minutes</dd>
+<dt>Authentication probe</dt><dd>{escape(PROBE.outcome)} — {escape(PROBE.detail)}</dd></dl>
+<form method="post" action="api/probe"><button type="submit">Run one-shot authentication probe</button></form>
+{"<p><img src='api/probe-frame' alt='Authenticated dashboard probe' style='max-width:100%'></p>" if PROBE.frame else ""}
 <div class="notice">This experimental App will send rendered images of the selected dashboard to anyone possessing a future active Demo Session link. Phase 1 cannot start or publish a session.</div>
 </section><footer>Version {escape(version)} · Independent from the LayerV Gateway</footer>
 </main></body></html>"""
@@ -130,13 +138,33 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps(status_payload(settings), separators=(",", ":")).encode("utf-8")
             self._send(200, body, "application/json")
             return
+        if path == "/api/probe-frame" and PROBE.frame:
+            self._send(200, PROBE.frame, "image/jpeg")
+            return
         if path == "/":
             self._send(200, status_html(settings, os.getenv("APP_VERSION", "development")), "text/html; charset=utf-8")
             return
         self._send(404, b"Not found\n", "text/plain; charset=utf-8")
 
     def do_POST(self):
-        self._send(405, b"Phase 1 does not support session actions.\n", "text/plain; charset=utf-8")
+        global PROBE
+        ingress_path = self.headers.get("X-Ingress-Path", "")
+        if not trusted_ingress(self.client_address[0], ingress_path):
+            self._send(403, b"Forbidden\n", "text/plain; charset=utf-8")
+            return
+        if (urlsplit(self.path).path.rstrip("/") or "/") != "/api/probe":
+            self._send(404, b"Not found\n", "text/plain; charset=utf-8")
+            return
+        if not PROBE_LOCK.acquire(blocking=False):
+            self._send(409, b"A probe is already running.\n", "text/plain; charset=utf-8")
+            return
+        try:
+            PROBE = ProbeResult("running", "Starting isolated Chromium")
+            PROBE = run_probe(SETTINGS, os.getenv("SUPERVISOR_TOKEN", ""))
+        finally:
+            PROBE_LOCK.release()
+        body = status_html(SETTINGS, os.getenv("APP_VERSION", "development"))
+        self._send(200, body, "text/html; charset=utf-8")
 
 
 def main() -> None:
