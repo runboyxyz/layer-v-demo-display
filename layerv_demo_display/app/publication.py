@@ -23,11 +23,20 @@ CONNECTOR_LOGS = DATA_DIR / "connector-logs-v2"
 INSTALLATION_FILE = CONNECTOR_STATE / "installation-id"
 LAYERV_API = os.getenv("LAYERV_API_BASE_URL", "https://api.layerv.ai").rstrip("/")
 RESOURCE_PATTERN = re.compile(r"(?m)^\s*resource_id:\s*[\"']?([^#\s\"']+)")
+URL_PATTERN = re.compile(r"(?:https?|wss?)://\S+", re.IGNORECASE)
+SECRET_PATTERN = re.compile(r"[A-Za-z0-9_-]{20,}")
 LOGGER = logging.getLogger("demo_display.publication")
 
 
 class PublicationError(RuntimeError):
     """Safe administrator-facing publication failure."""
+
+
+def safe_connector_message(value: str) -> str:
+    """Bound and redact untrusted connector diagnostics before app logging."""
+    message = URL_PATTERN.sub("[url]", value.strip())
+    message = SECRET_PATTERN.sub("[identifier]", message)
+    return message[:300]
 
 
 def secure_storage_modes() -> None:
@@ -149,6 +158,9 @@ class LayerVPublisher:
                 raise PublicationError("LayerV rejected connector registration")
             if not self._resource_id:
                 raise PublicationError("LayerV registration returned no resource identity")
+            diagnostic = safe_connector_message(completed.stderr or "")
+            if diagnostic:
+                LOGGER.info("Connector registration diagnostic: %s", diagnostic)
         self.start_connector()
 
     def _environment(self, include_key: bool = False) -> dict[str, str]:
@@ -179,9 +191,26 @@ class LayerVPublisher:
                 ["/usr/local/bin/qurl-connector", "-c", str(CONNECTOR_CONFIG), "run"],
                 env=self._environment(include_key=not self._state_complete()),
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
             )
+            threading.Thread(
+                target=self._monitor_connector,
+                args=(self._connector,),
+                name="connector-diagnostics",
+                daemon=True,
+            ).start()
+
+    @staticmethod
+    def _monitor_connector(connector: subprocess.Popen) -> None:
+        if connector.stdout is not None:
+            for line in connector.stdout:
+                diagnostic = safe_connector_message(line)
+                if diagnostic:
+                    LOGGER.info("Connector diagnostic: %s", diagnostic)
+        LOGGER.warning("Connector stopped: exit_code=%s", connector.wait())
 
     def publish(self, display_token: str, lifetime_minutes: int) -> str:
         if not self.configured:

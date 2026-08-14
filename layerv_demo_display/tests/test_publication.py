@@ -9,6 +9,12 @@ from app import publication
 
 
 class PublicationTests(unittest.TestCase):
+    def test_connector_diagnostics_redact_urls_and_long_identifiers(self):
+        message = publication.safe_connector_message(
+            "failed https://private.example/path token abcdefghijklmnopqrstuvwxyz012345"
+        )
+        self.assertEqual(message, "failed [url] token [identifier]")
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         root = Path(self.directory.name)
