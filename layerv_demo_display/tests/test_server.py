@@ -46,6 +46,9 @@ class ServerTests(unittest.TestCase):
         self.assertIn("Start Demo Session", page)
         self.assertNotIn("/display/", page)
 
+    def test_admin_script_supports_separate_activation_and_display_copy(self):
+        self.assertIn("[data-copy]", __import__("app.server", fromlist=["ADMIN_SCRIPT"]).ADMIN_SCRIPT)
+
     def test_viewer_is_pixels_only_and_refreshes_latest_frame(self):
         page = viewer_html(3).decode()
         self.assertIn("LIVE • READ ONLY", page)

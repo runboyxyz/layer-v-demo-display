@@ -43,7 +43,7 @@ TRUSTED_PROXIES = frozenset(
     if item.strip()
 )
 VIEWER_SCRIPT_TEMPLATE = r"""const image=document.getElementById('frame');const state=document.getElementById('state');const refresh=()=>{const next=new Image();next.onload=()=>{image.src=next.src;state.textContent='LIVE • READ ONLY'};next.onerror=()=>{state.textContent='WAITING FOR DISPLAY…'};next.src=location.pathname.replace(/\/$/,'')+'/frame?t='+Date.now()};refresh();setInterval(refresh,__INTERVAL__);"""
-ADMIN_SCRIPT = """const copy=document.getElementById('copy-path');if(copy)copy.addEventListener('click',async()=>{await navigator.clipboard.writeText(document.getElementById('display-path').textContent);copy.textContent='Copied'});"""
+ADMIN_SCRIPT = """document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{await navigator.clipboard.writeText(document.getElementById(button.dataset.copy).textContent);button.textContent='Copied'}));"""
 ADMIN_SCRIPT_HASH = base64.b64encode(sha256(ADMIN_SCRIPT.encode()).digest()).decode()
 
 COMMON_HEADERS = {
@@ -156,14 +156,24 @@ def status_html(settings: Settings, version: str, message: str = "") -> bytes:
     display_path = f"/display/{escape(current.token)}" if current.token else "—"
     publisher = PUBLISHER
     remote_url = publisher.remote_url if publisher else ""
+    activation_url = publisher.activation_url if publisher else ""
     publication = (
         "Connected" if publisher and publisher.connected else
         "Configured" if publisher and publisher.configured else "Not connected"
     )
+    activation = (
+        '<p><label>1. Activate LayerV access</label>'
+        f'<code id="activation-path">{escape(activation_url)}</code></p>'
+        '<p><a href="' + escape(activation_url) + '" target="_blank" rel="noopener noreferrer">'
+        'Open Activation qURL</a> '
+        '<button data-copy="activation-path" type="button">Copy Activation qURL</button></p>'
+        if activation_url else ""
+    )
     actions = (
-        f"<p><label>{'Remote LayerV link' if remote_url else 'Local display path'}</label>"
+        activation
+        + f"<p><label>{'2. Open Demo Display' if remote_url else 'Local display path'}</label>"
         f"<code id=\"display-path\">{escape(remote_url or display_path)}</code></p>"
-        '<p><button id="copy-path" type="button">Copy Display Link</button></p>'
+        '<p><button data-copy="display-path" type="button">Copy Display Link</button></p>'
         '<form method="post" action="api/session/end"><button class="danger" type="submit">End Demo Session</button></form>'
         if active
         else '<form method="post" action="api/session/start">'
@@ -192,7 +202,7 @@ h1{{margin:.5rem 0 1.8rem;font-size:clamp(2rem,6vw,3.5rem)}}.card{{background:#1
 .secondary{{margin-top:18px}}h2{{margin-top:0}}label{{display:block;color:#9da7b5;margin:14px 0 6px}}input{{box-sizing:border-box;width:100%;padding:.75rem;background:#090b0e;color:white;border:1px solid #39414c;border-radius:8px}}.check{{display:flex;gap:8px;align-items:center;color:#f4f6f8}}.check input{{width:auto}}
 .state{{display:flex;gap:12px;align-items:center;margin-bottom:22px}}.dot{{width:12px;height:12px;border-radius:50%;background:{'#31c48d' if active else '#7c8797'}}}
 dl{{display:grid;grid-template-columns:minmax(130px,1fr) 2fr;gap:12px}}dt{{color:#9da7b5}}dd{{margin:0;overflow-wrap:anywhere}}
-button{{padding:.8rem 1rem;margin-top:14px;border:0;border-radius:8px;font-weight:800;cursor:pointer}}.danger{{background:#c24141;color:white}}code{{display:block;padding:12px;background:#090b0e;overflow-wrap:anywhere}}
+button,a{{padding:.8rem 1rem;margin-top:14px;border:0;border-radius:8px;font-weight:800;cursor:pointer}}a{{display:inline-block;background:#f7c948;color:#111;text-decoration:none}}.danger{{background:#c24141;color:white}}code{{display:block;padding:12px;background:#090b0e;overflow-wrap:anywhere}}
 .notice{{margin-top:20px;padding:18px;border-left:3px solid #f7c948;background:#1d1b13;line-height:1.5}}footer{{color:#7f8997;margin-top:22px;font-size:.85rem}}
 </style></head><body><main><div class="eyebrow">DEVELOPMENT / DEMONSTRATION TOOL</div><h1>LayerV Demo Display</h1><section class="card">
 {f'<div class="notice">{escape(message)}</div>' if message else ''}<div class="state"><span class="dot"></span><strong>Demo Session: {'Active' if active else 'Not running'}</strong></div><dl>

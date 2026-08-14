@@ -30,6 +30,7 @@ class Handler(socketserver.StreamRequestHandler):
                     "configured": PUBLISHER.configured,
                     "connected": PUBLISHER.connected,
                     "remote_url": PUBLISHER.remote_url,
+                    "activation_url": PUBLISHER.activation_url,
                 }
             elif operation == "connect":
                 PUBLISHER.connect(str(request.get("api_key") or ""))

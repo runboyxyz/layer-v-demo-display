@@ -60,6 +60,7 @@ class LayerVPublisher:
         self._connector: subprocess.Popen | None = None
         self._resource_id = self._read_resource_id()
         self._remote_url = ""
+        self._activation_url = ""
         self._qurl_id = ""
 
     @property
@@ -70,6 +71,11 @@ class LayerVPublisher:
     def remote_url(self) -> str:
         with self._lock:
             return self._remote_url
+
+    @property
+    def activation_url(self) -> str:
+        with self._lock:
+            return self._activation_url
 
     @property
     def connected(self) -> bool:
@@ -225,11 +231,13 @@ class LayerVPublisher:
         if not isinstance(data, dict):
             raise PublicationError("LayerV returned invalid qURL data")
         site = str(data.get("qurl_site") or "").rstrip("/")
+        activation = str(data.get("qurl_link") or data.get("qurl") or "").strip()
         qurl_id = str(data.get("qurl_id") or data.get("qurl_display_id") or data.get("id") or "")
-        if not site or not qurl_id:
+        if not site or not activation or not qurl_id:
             raise PublicationError("LayerV returned an incomplete qURL")
         with self._lock:
             self._qurl_id = qurl_id
+            self._activation_url = activation
             self._remote_url = f"{site}/display/{display_token}"
             return self._remote_url
 
@@ -238,6 +246,7 @@ class LayerVPublisher:
             qurl_id = self._qurl_id
             self._qurl_id = ""
             self._remote_url = ""
+            self._activation_url = ""
         if not qurl_id or not self._resource_id or not SECRET_FILE.is_file():
             return
         try:

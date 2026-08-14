@@ -76,12 +76,17 @@ class PublicationTests(unittest.TestCase):
         publication.SECRET_FILE.write_text("synthetic-key")
         publication.CONNECTOR_CONFIG.write_text("resource_id: r_demo\n")
         publisher = publication.LayerVPublisher()
-        response = {"data": {"qurl_site": "https://demo.qurl.site", "qurl_id": "q_one"}}
+        response = {"data": {
+            "qurl_site": "https://demo.qurl.site",
+            "qurl_link": "https://activate.example/q_one",
+            "qurl_id": "q_one",
+        }}
         with patch.object(publisher, "start_connector"), patch.object(
             publisher, "_request", return_value=response
         ):
             result = publisher.publish("display-secret", 30)
         self.assertEqual(result, "https://demo.qurl.site/display/display-secret")
+        self.assertEqual(publisher.activation_url, "https://activate.example/q_one")
         self.assertNotIn("homeassistant", result)
 
     def test_publisher_secures_storage_after_supervisor_bootstrap(self):

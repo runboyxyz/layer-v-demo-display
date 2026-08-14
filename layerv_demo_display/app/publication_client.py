@@ -50,6 +50,10 @@ class LayerVPublisher:
     def remote_url(self) -> str:
         return str(self._call("status").get("remote_url") or "")
 
+    @property
+    def activation_url(self) -> str:
+        return str(self._call("status").get("activation_url") or "")
+
     def connect(self, api_key: str) -> None:
         self._call("connect", api_key=api_key)
 
