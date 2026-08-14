@@ -40,6 +40,8 @@ SETTINGS = Settings()
 SESSION = DemoSession()
 PUBLISHER: LayerVPublisher | None = None
 VERIFICATION = VerificationGate()
+ADMIN_NOTICE = ""
+ADMIN_NOTICE_LOCK = threading.Lock()
 TRUSTED_PROXIES = frozenset(
     item.strip()
     for item in os.getenv("TRUSTED_INGRESS_PROXIES", "172.30.32.2").split(",")
@@ -88,6 +90,20 @@ def trusted_ingress(client_ip: str, ingress_path: str) -> bool:
         and "\r" not in ingress_path
         and "\n" not in ingress_path
     )
+
+
+def set_admin_notice(value: str) -> None:
+    global ADMIN_NOTICE
+    with ADMIN_NOTICE_LOCK:
+        ADMIN_NOTICE = value[:500]
+
+
+def take_admin_notice() -> str:
+    global ADMIN_NOTICE
+    with ADMIN_NOTICE_LOCK:
+        value = ADMIN_NOTICE
+        ADMIN_NOTICE = ""
+        return value
 
 
 def drop_runtime_identity(uid: int = RUNTIME_UID, gid: int = RUNTIME_GID) -> None:
@@ -316,7 +332,15 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps(status_payload(SETTINGS), separators=(",", ":")).encode()
             self._send(200, body, "application/json")
         elif path == "/":
-            self._send(200, status_html(SETTINGS, os.getenv("APP_VERSION", "development")), "text/html; charset=utf-8")
+            self._send(
+                200,
+                status_html(
+                    SETTINGS,
+                    os.getenv("APP_VERSION", "development"),
+                    take_admin_notice(),
+                ),
+                "text/html; charset=utf-8",
+            )
         else:
             self._send(404, b"Not found\n", "text/plain; charset=utf-8")
 
@@ -337,6 +361,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         message = ""
         if path == "/api/session/start":
+            if SESSION.snapshot().active:
+                set_admin_notice("A Demo Session is already active.")
+                self._redirect_admin()
+                return
             try:
                 verification_email = (
                     form.get("verification_email", "")
@@ -355,7 +383,8 @@ class Handler(BaseHTTPRequestHandler):
                 VERIFICATION.end()
                 if PUBLISHER:
                     PUBLISHER.revoke()
-                self._send(409, status_html(SETTINGS, os.getenv("APP_VERSION", "development"), str(error)), "text/html; charset=utf-8")
+                set_admin_notice(str(error))
+                self._redirect_admin()
                 return
         elif path == "/api/session/end":
             SESSION.end("ended")
@@ -384,7 +413,20 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, b"Not found\n", "text/plain; charset=utf-8")
             return
-        self._send(200, status_html(SETTINGS, os.getenv("APP_VERSION", "development"), message), "text/html; charset=utf-8")
+        if message:
+            set_admin_notice(message)
+        self._redirect_admin()
+
+    def _redirect_admin(self) -> None:
+        # Every administrative action is exactly two path components beneath
+        # the Ingress root. Returning there prevents later relative forms from
+        # nesting under the previous action URL.
+        self._send(
+            303,
+            b"",
+            "text/plain; charset=utf-8",
+            extra_headers={"Location": "../../"},
+        )
 
     def _verification(self, token: str, action: str) -> None:
         if not SESSION.valid_token(token) or not VERIFICATION.required:

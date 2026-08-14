@@ -10,6 +10,8 @@ from app.server import (
     drop_runtime_identity,
     status_html,
     status_payload,
+    set_admin_notice,
+    take_admin_notice,
     trusted_ingress,
     viewer_html,
     viewer_csp,
@@ -59,6 +61,11 @@ class ServerTests(unittest.TestCase):
         self.assertIn("form-action 'self'", ADMIN_CSP)
         self.assertIn("frame-ancestors 'none'", VIEWER_CSP)
         self.assertIn("default-src 'none'", VIEWER_CSP)
+
+    def test_admin_notice_is_one_time_and_bounded(self):
+        set_admin_notice("x" * 600)
+        self.assertEqual(take_admin_notice(), "x" * 500)
+        self.assertEqual(take_admin_notice(), "")
 
     @patch("app.server.os.setuid")
     @patch("app.server.os.setgid")

@@ -36,6 +36,10 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("chmod 0755 /run.sh /usr/local/bin/qurl-connector", dockerfile)
         self.assertIn("test -x /usr/local/bin/qurl-connector", dockerfile)
 
+    def test_connector_apparmor_rule_allows_its_executable_mapping(self):
+        profile = (Path(__file__).parents[1] / "apparmor.txt").read_text()
+        self.assertIn("/usr/local/bin/qurl-connector mrix,", profile)
+
 
 if __name__ == "__main__":
     unittest.main()
