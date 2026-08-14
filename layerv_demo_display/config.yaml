@@ -1,5 +1,5 @@
 name: LayerV Demo Display
-version: "0.5.0"
+version: "0.5.1"
 slug: layerv_demo_display
 description: DEVELOPMENT TOOL - remotely show rendered dashboard pixels during LayerV demonstrations
 url: https://github.com/runboyxyz/layer-v-demo-display

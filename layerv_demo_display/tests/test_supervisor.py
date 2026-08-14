@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -6,6 +8,19 @@ from app import supervisor
 
 
 class SupervisorTests(unittest.TestCase):
+    @patch("app.supervisor.os.chown")
+    def test_existing_non_root_directory_is_not_chmodded_by_bootstrap(self, chown):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "existing"
+            with patch.object(Path, "exists", return_value=True), patch.object(
+                Path, "mkdir"
+            ), patch.object(Path, "stat") as stat:
+                stat.return_value.st_uid = 2200
+                with patch.object(Path, "chmod") as chmod:
+                    supervisor._directory(path, 2200)
+            chmod.assert_not_called()
+            chown.assert_called_once_with(path, 2200, supervisor.RUNTIME_GID)
+
     @patch("app.supervisor.os.umask")
     @patch("app.supervisor.os.setuid")
     @patch("app.supervisor.os.setgid")

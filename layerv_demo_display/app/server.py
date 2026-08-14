@@ -24,6 +24,7 @@ from .verification import (
     VerificationError,
     VerificationGate,
     configure_smtp,
+    secure_smtp_storage,
     smtp_configured,
 )
 
@@ -447,6 +448,7 @@ def main() -> None:
     SETTINGS = load_settings()
     if os.geteuid() == 0:
         raise RuntimeError("HTTP server must be launched by the runtime supervisor")
+    secure_smtp_storage()
     PUBLISHER = LayerVPublisher()
     PUBLISHER.start_connector()
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)

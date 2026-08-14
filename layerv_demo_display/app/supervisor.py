@@ -28,9 +28,14 @@ LEGACY_KEY = Path("/data/secrets/layerv-api-key")
 
 
 def _directory(path: Path, uid: int, mode: int = 0o700) -> None:
+    created = not path.exists()
     path.mkdir(parents=True, exist_ok=True)
+    # AppArmor intentionally withholds fowner. Set the mode only while this
+    # bootstrap still owns a newly created path; existing UID-owned storage is
+    # secured later by the process that owns it.
+    if created or path.stat().st_uid == 0:
+        path.chmod(mode)
     os.chown(path, uid, RUNTIME_GID)
-    path.chmod(mode)
 
 
 def _own_tree(path: Path, uid: int) -> None:

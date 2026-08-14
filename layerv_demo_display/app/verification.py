@@ -23,6 +23,11 @@ class VerificationError(RuntimeError):
     """Safe error for administrator or viewer display."""
 
 
+def secure_smtp_storage() -> None:
+    """Enforce the mode after the server is running as the directory owner."""
+    SMTP_FILE.parent.chmod(0o700)
+
+
 def _atomic_json(path: Path, value: dict) -> None:
     temporary = path.with_name(f".{path.name}.tmp")
     temporary.write_text(json.dumps(value), encoding="utf-8")
