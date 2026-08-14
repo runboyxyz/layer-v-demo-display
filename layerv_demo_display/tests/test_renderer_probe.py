@@ -11,9 +11,9 @@ from app.configuration import Settings
 
 class RendererProbeTests(unittest.TestCase):
     def test_navigation_is_restricted_to_home_assistant_origin(self):
-        origin = "http://100.64.90.108"
+        origin = "http://homeassistant"
         self.assertTrue(allowed_request(origin + "/demo-home/home", origin))
-        self.assertTrue(allowed_request("blob:http://100.64.90.108/id", origin))
+        self.assertTrue(allowed_request("blob:http://homeassistant/id", origin))
         for url in ("https://evil.example/", "file:///etc/passwd", "javascript:alert(1)"):
             with self.subTest(url=url):
                 self.assertFalse(allowed_request(url, origin))
