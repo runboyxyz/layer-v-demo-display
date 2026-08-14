@@ -16,6 +16,11 @@ using the App-scoped system token, restricts browser traffic to the fixed
 `homeassistant:80` HTTP/WebSocket origin pair, waits for the visible Lovelace
 root, and maintains one current in-memory JPEG.
 
+The injected bridge exposes only the supported authentication and revocation
+methods. It intentionally does not advertise `externalAppV2` or an external
+messaging bus, because those interfaces require a broader native-app command
+contract that this pixel renderer neither needs nor implements.
+
 This remains an experiment. It deliberately uses
 Chromium's `--no-sandbox` mode because HA OS container namespaces must first be
 measured; Chromium remains a non-root UID under the AppArmor profile. This

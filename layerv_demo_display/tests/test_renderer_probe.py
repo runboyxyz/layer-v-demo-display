@@ -29,6 +29,8 @@ class RendererProbeTests(unittest.TestCase):
         script = external_auth_script()
         self.assertIn("__demoDisplayToken", script)
         self.assertNotIn("SUPERVISOR_TOKEN", script)
+        self.assertNotIn("externalAppV2", script)
+        self.assertNotIn("externalBus", script)
 
     def test_missing_token_does_not_launch_browser(self):
         result = run_probe(Settings(), "")

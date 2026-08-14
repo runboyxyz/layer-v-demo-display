@@ -31,7 +31,7 @@ async def _capture_loop(session, settings, token: str) -> None:
     from playwright.async_api import async_playwright
 
     width, height = settings.viewport
-    browser = context = stop_task = None
+    browser = context = stop_task = startup_watchdog = None
     LOGGER.info("Renderer starting")
     try:
         async with async_playwright() as playwright:
@@ -47,6 +47,13 @@ async def _capture_loop(session, settings, token: str) -> None:
                     await browser.close()
 
             stop_task = asyncio.create_task(close_when_stopped())
+
+            async def stop_if_startup_hangs():
+                await asyncio.sleep(60)
+                LOGGER.warning("Renderer startup deadline exceeded")
+                session.renderer_stopped(failed=True)
+
+            startup_watchdog = asyncio.create_task(stop_if_startup_hangs())
             context = await browser.new_context(
                 viewport={"width": width, "height": height},
                 service_workers="block",
@@ -69,6 +76,9 @@ async def _capture_loop(session, settings, token: str) -> None:
             await page.wait_for_timeout(2_000)
             if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
                 raise RuntimeError("Home Assistant rejected the App identity")
+            startup_watchdog.cancel()
+            await asyncio.gather(startup_watchdog, return_exceptions=True)
+            startup_watchdog = None
             session.renderer_started()
             LOGGER.info("Renderer started")
 
@@ -90,6 +100,9 @@ async def _capture_loop(session, settings, token: str) -> None:
                 if remaining > 0:
                     await asyncio.to_thread(session.stop_event.wait, remaining)
     finally:
+        if startup_watchdog is not None:
+            startup_watchdog.cancel()
+            await asyncio.gather(startup_watchdog, return_exceptions=True)
         if stop_task is not None:
             stop_task.cancel()
             await asyncio.gather(stop_task, return_exceptions=True)

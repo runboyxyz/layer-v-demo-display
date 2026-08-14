@@ -66,7 +66,6 @@ def external_auth_script() -> str:
     const token = await window.__demoDisplayToken();
     window[callback]?.(true, {access_token: token, expires_in: 1800});
   };
-  window.externalAppV2 = {postMessage: reply};
   window.externalApp = {getExternalAuth: reply, revokeExternalAuth: reply};
 })();
 """
