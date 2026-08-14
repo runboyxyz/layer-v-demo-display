@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 import os
 from urllib.parse import urlsplit
 
 
 HA_ORIGIN = os.getenv("HA_FRONTEND_ORIGIN", "http://homeassistant:8123").rstrip("/")
 CHROMIUM = os.getenv("CHROMIUM_EXECUTABLE", "/usr/bin/chromium")
+LOGGER = logging.getLogger("demo_display.renderer_probe")
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,7 @@ def run_probe(settings, token: str, timeout_ms: int = 45_000) -> ProbeResult:
 
     width, height = settings.viewport
     browser = context = None
+    stage = "launch"
     try:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(
@@ -70,10 +73,12 @@ def run_probe(settings, token: str, timeout_ms: int = 45_000) -> ProbeResult:
                 # The browser remains non-root and AppArmor-confined.
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
+            stage = "context"
             context = browser.new_context(
                 viewport={"width": width, "height": height},
                 service_workers="block",
             )
+            stage = "page"
             page = context.new_page()
             page.expose_function("__demoDisplayToken", lambda: token)
             page.add_init_script(script=external_auth_script())
@@ -86,17 +91,29 @@ def run_probe(settings, token: str, timeout_ms: int = 45_000) -> ProbeResult:
 
             page.route("**/*", route_request)
             target = f"{HA_ORIGIN}{settings.dashboard_path}?external_auth=1"
+            stage = "navigation"
             page.goto(target, wait_until="domcontentloaded", timeout=timeout_ms)
+            stage = "frontend"
             page.wait_for_selector("home-assistant", state="attached", timeout=timeout_ms)
             page.wait_for_timeout(2_000)
             if not page.url.startswith(f"{HA_ORIGIN}{settings.dashboard_path}"):
                 return ProbeResult("failed", "Home Assistant did not accept the App identity")
+            stage = "capture"
             frame = page.screenshot(type="jpeg", quality=75, full_page=False)
             return ProbeResult("succeeded", "Authenticated dashboard pixels captured", frame)
     except PlaywrightTimeout:
-        return ProbeResult("failed", "Home Assistant dashboard did not become ready")
-    except Exception:
-        return ProbeResult("failed", "Chromium authentication probe failed")
+        LOGGER.warning("Authentication probe timed out: stage=%s", stage)
+        return ProbeResult("failed", f"Probe timed out during {stage}")
+    except Exception as error:
+        # Do not log the exception message: browser errors can include URLs and
+        # environment-derived values. Stage and exception type are sufficient
+        # to distinguish confinement, launch, navigation, and capture faults.
+        LOGGER.warning(
+            "Authentication probe failed: stage=%s error_type=%s",
+            stage,
+            type(error).__name__,
+        )
+        return ProbeResult("failed", f"Probe failed during {stage} ({type(error).__name__})")
     finally:
         if context is not None:
             try:
